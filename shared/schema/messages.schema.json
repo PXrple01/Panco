@@ -59,6 +59,18 @@
         { "$ref": "#/$defs/State" }
       ]
     },
+    "Choice": {
+      "description": "Auswahl unter einer Antwort (z. B. Suchtreffer). Ein Klick schickt 'invoke' mit action/params.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "action", "params"],
+      "properties": {
+        "label": { "type": "string", "maxLength": 200 },
+        "detail": { "type": "string", "maxLength": 300 },
+        "action": { "type": "string", "pattern": "^[a-z]+\\.[a-z_]+$" },
+        "params": { "type": "object" }
+      }
+    },
     "Mood": {
       "description": "Avatar-Reaktion zur Antwort.",
       "enum": ["success", "game", "confused", "error", "info"]
@@ -73,7 +85,8 @@
         "ok": { "type": "boolean" },
         "text": { "type": "string", "maxLength": 300 },
         "mood": { "$ref": "#/$defs/Mood" },
-        "action": { "type": ["string", "null"] }
+        "action": { "type": ["string", "null"] },
+        "choices": { "type": "array", "maxItems": 10, "items": { "$ref": "#/$defs/Choice" } }
       }
     },
     "ConfirmRequest": {
@@ -88,7 +101,8 @@
         "text": { "type": "string", "maxLength": 300 },
         "tier": { "enum": [1, 2, 3] },
         "expires_in_ms": { "type": "integer", "minimum": 0 },
-        "pc_only": { "type": "boolean" }
+        "pc_only": { "type": "boolean" },
+        "choices": { "type": "array", "maxItems": 10, "items": { "$ref": "#/$defs/Choice" } }
       }
     },
     "State": {

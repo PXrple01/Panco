@@ -28,6 +28,8 @@ features = [
   "Win32_System_Diagnostics_ToolHelp",
   "Win32_System_Power",
   "Win32_Security",
+  "Win32_Security_Cryptography",
+  "Win32_System_Time",
   "Win32_Media_Audio",
   "Win32_Media_Audio_Endpoints",
   "Win32_UI_Shell",

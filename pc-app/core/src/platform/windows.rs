@@ -3,8 +3,12 @@
 use super::*;
 use ::windows::core::{w, BOOL, HSTRING, PCWSTR, PWSTR};
 use ::windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, LPARAM, LUID, WPARAM};
+use ::windows::Win32::Foundation::{LocalFree, HLOCAL};
 use ::windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
 use ::windows::Win32::Media::Audio::{eConsole, eRender, IMMDeviceEnumerator, MMDeviceEnumerator};
+use ::windows::Win32::Security::Cryptography::{
+    CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+};
 use ::windows::Win32::Security::{
     AdjustTokenPrivileges, LookupPrivilegeValueW, LUID_AND_ATTRIBUTES, SE_PRIVILEGE_ENABLED, SE_SHUTDOWN_NAME,
     TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
@@ -26,6 +30,7 @@ use ::windows::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentProcessId, GetProcessTimes, OpenProcess, OpenProcessToken, QueryFullProcessImageNameW,
     PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
 };
+use ::windows::Win32::System::Time::{GetTimeZoneInformation, TIME_ZONE_INFORMATION};
 use ::windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, VIRTUAL_KEY,
     VK_LWIN, VK_MEDIA_NEXT_TRACK, VK_MEDIA_PLAY_PAUSE, VK_MEDIA_PREV_TRACK, VK_MEDIA_STOP, VK_MENU, VK_SNAPSHOT,
@@ -255,6 +260,33 @@ impl Platform for WindowsPlatform {
         stats()
     }
 
+    fn reveal(&self, path: &std::path::Path) -> PResult<()> {
+        let params = HSTRING::from(format!("/select,\"{}\"", path.display()));
+        let result =
+            unsafe { ShellExecuteW(None, w!("open"), w!("explorer.exe"), &params, PCWSTR::null(), SW_SHOWNORMAL) };
+        if result.0 as usize > 32 {
+            Ok(())
+        } else {
+            Err(fail("Explorer ließ sich nicht öffnen"))
+        }
+    }
+
+    fn protect(&self, data: &[u8]) -> PResult<Vec<u8>> {
+        dpapi(data, true)
+    }
+
+    fn unprotect(&self, data: &[u8]) -> PResult<Vec<u8>> {
+        dpapi(data, false)
+    }
+
+    fn utc_offset_secs(&self) -> i32 {
+        let mut tz = TIME_ZONE_INFORMATION::default();
+        let mode = unsafe { GetTimeZoneInformation(&mut tz) };
+        // UTC = lokal + Bias (Minuten); 2 = Sommerzeit aktiv
+        let bias = tz.Bias + if mode == 2 { tz.DaylightBias } else { tz.StandardBias };
+        -bias * 60
+    }
+
     fn close_process(&self, process: &str) -> PResult<usize> {
         let targets: Vec<WindowInfo> =
             self.windows()?.into_iter().filter(|w| w.process.eq_ignore_ascii_case(process)).collect();
@@ -265,6 +297,25 @@ impl Platform for WindowsPlatform {
             }
         }
         Ok(targets.len())
+    }
+}
+
+/// DPAPI: an das Windows-Benutzerkonto gebunden, ohne eigenes Passwort.
+fn dpapi(data: &[u8], encrypt: bool) -> PResult<Vec<u8>> {
+    const ENTROPY: &[u8] = b"Panco-Notizen-v1";
+    let input = CRYPT_INTEGER_BLOB { cbData: data.len() as u32, pbData: data.as_ptr() as *mut u8 };
+    let entropy = CRYPT_INTEGER_BLOB { cbData: ENTROPY.len() as u32, pbData: ENTROPY.as_ptr() as *mut u8 };
+    let mut out = CRYPT_INTEGER_BLOB::default();
+    unsafe {
+        let res = if encrypt {
+            CryptProtectData(&input, w!("Panco"), Some(&entropy), None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut out)
+        } else {
+            CryptUnprotectData(&input, None, Some(&entropy), None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut out)
+        };
+        res.map_err(|e| fail(format!("Verschlüsselung: {e}")))?;
+        let bytes = std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec();
+        let _ = LocalFree(Some(HLOCAL(out.pbData as *mut core::ffi::c_void)));
+        Ok(bytes)
     }
 }
 

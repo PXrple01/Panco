@@ -11,8 +11,16 @@
       "params": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["target"],
-        "properties": { "target": { "type": "string", "minLength": 1, "maxLength": 120 } }
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        }
       }
     },
     {
@@ -24,8 +32,16 @@
       "params": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["target"],
-        "properties": { "target": { "type": "string", "minLength": 1, "maxLength": 120 } }
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        }
       }
     },
     {
@@ -37,8 +53,16 @@
       "params": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["target"],
-        "properties": { "target": { "type": "string", "minLength": 1, "maxLength": 120 } }
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        }
       }
     },
     {
@@ -50,8 +74,16 @@
       "params": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["level"],
-        "properties": { "level": { "type": "integer", "minimum": 0, "maximum": 100 } }
+        "required": [
+          "level"
+        ],
+        "properties": {
+          "level": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        }
       }
     },
     {
@@ -63,8 +95,16 @@
       "params": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["delta"],
-        "properties": { "delta": { "type": "integer", "minimum": -100, "maximum": 100 } }
+        "required": [
+          "delta"
+        ],
+        "properties": {
+          "delta": {
+            "type": "integer",
+            "minimum": -100,
+            "maximum": 100
+          }
+        }
       }
     },
     {
@@ -76,7 +116,11 @@
       "params": {
         "type": "object",
         "additionalProperties": false,
-        "properties": { "mute": { "type": "boolean" } }
+        "properties": {
+          "mute": {
+            "type": "boolean"
+          }
+        }
       }
     },
     {
@@ -88,8 +132,19 @@
       "params": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["command"],
-        "properties": { "command": { "enum": ["play_pause", "next", "previous", "stop"] } }
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "enum": [
+              "play_pause",
+              "next",
+              "previous",
+              "stop"
+            ]
+          }
+        }
       }
     },
     {
@@ -101,8 +156,16 @@
       "params": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["query"],
-        "properties": { "query": { "type": "string", "minLength": 1, "maxLength": 200 } }
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
       }
     },
     {
@@ -114,8 +177,16 @@
       "params": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["url"],
-        "properties": { "url": { "type": "string", "pattern": "^https://", "maxLength": 500 } }
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "pattern": "^https://",
+            "maxLength": 500
+          }
+        }
       }
     },
     {
@@ -124,7 +195,11 @@
       "remote": true,
       "title": "Screenshot",
       "description": "Speichert einen Screenshot des ganzen Bildschirms in Bilder\\Screenshots.",
-      "params": { "type": "object", "additionalProperties": false, "properties": {} }
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
     },
     {
       "id": "system.lock",
@@ -132,7 +207,11 @@
       "remote": true,
       "title": "PC sperren",
       "description": "Sperrt den Windows-Bildschirm.",
-      "params": { "type": "object", "additionalProperties": false, "properties": {} }
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
     },
     {
       "id": "system.power",
@@ -143,8 +222,296 @@
       "params": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["mode"],
-        "properties": { "mode": { "enum": ["shutdown", "restart", "sleep"] } }
+        "required": [
+          "mode"
+        ],
+        "properties": {
+          "mode": {
+            "enum": [
+              "shutdown",
+              "restart",
+              "sleep"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "file.search",
+      "tier": 1,
+      "remote": true,
+      "title": "Dateien suchen",
+      "description": "Sucht in den freigegebenen Ordnern nach Dateien, z. B. 'meine letzte Rechnung', 'Screenshots von gestern', 'Bewerbung als PDF'. Liefert die besten Treffer zur Auswahl; open=true öffnet einen eindeutigen Treffer direkt.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "open": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "id": "file.open",
+      "tier": 1,
+      "remote": true,
+      "title": "Datei oder Ordner öffnen",
+      "description": "Öffnet eine Datei mit dem Standardprogramm oder einen Ordner im Explorer (reveal=true: im Ordner zeigen). path ist ein Pfad oder ein gesprochener Name. Programme/Skripte werden nie geöffnet. Außerhalb freigegebener Ordner mit Rückfrage.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          },
+          "reveal": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "id": "file.delete",
+      "tier": 2,
+      "remote": true,
+      "title": "Datei/Ordner löschen (Papierkorb)",
+      "description": "Verschiebt eine Datei oder einen Ordner in den Panco-Papierkorb (wiederherstellbar, Aufbewahrungsfrist). Löscht nie endgültig. Braucht Bestätigung.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          }
+        }
+      }
+    },
+    {
+      "id": "file.move",
+      "tier": 2,
+      "remote": true,
+      "title": "Datei/Ordner verschieben",
+      "description": "Verschiebt eine Datei/einen Ordner in einen anderen Ordner (to: 'Dokumente', 'Downloads', Pfad oder Name eines Unterordners). Rückgängig machbar. Braucht Bestätigung.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "to"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          }
+        }
+      }
+    },
+    {
+      "id": "file.rename",
+      "tier": 2,
+      "remote": true,
+      "title": "Datei/Ordner umbenennen",
+      "description": "Benennt eine Datei/einen Ordner um; ohne neue Endung bleibt die alte erhalten. Rückgängig machbar. Braucht Bestätigung.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "name"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      }
+    },
+    {
+      "id": "folder.create",
+      "tier": 1,
+      "remote": true,
+      "title": "Ordner anlegen",
+      "description": "Legt einen Ordner an (parent: 'Dokumente', 'Desktop', Pfad …; Standard: Dokumente). In freigegebenen Ordnern sofort, sonst mit Rückfrage.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "parent": {
+            "type": "string",
+            "maxLength": 400
+          }
+        }
+      }
+    },
+    {
+      "id": "trash.restore",
+      "tier": 1,
+      "remote": false,
+      "title": "Aus dem Papierkorb wiederherstellen",
+      "description": "Holt einen Eintrag aus dem Panco-Papierkorb an seinen ursprünglichen Ort zurück.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9-]{1,40}$"
+          }
+        }
+      }
+    },
+    {
+      "id": "panco.undo",
+      "tier": 1,
+      "remote": true,
+      "title": "Rückgängig",
+      "description": "Macht die letzte umkehrbare Panco-Aktion (oder die mit dieser Protokoll-ID) rückgängig: Papierkorb zurückholen, Verschieben/Umbenennen umkehren, Lautstärke zurücksetzen …",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 60
+          }
+        }
+      }
+    },
+    {
+      "id": "note.create",
+      "tier": 1,
+      "remote": true,
+      "redact": true,
+      "title": "Notiz anlegen",
+      "description": "Legt eine Notiz mit Titel an (optional erster Text). Sensible Titel (Passwörter, PIN, Zugangsdaten …) oder secret=true werden verschlüsselt.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "secret": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "id": "note.append",
+      "tier": 1,
+      "remote": true,
+      "redact": true,
+      "title": "An Notiz anhängen",
+      "description": "Hängt eine Zeile an eine Notiz an (ohne Titel: die zuletzt benutzte).",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 80
+          }
+        }
+      }
+    },
+    {
+      "id": "note.read",
+      "tier": 1,
+      "remote": true,
+      "redact": true,
+      "title": "Notiz vorlesen",
+      "description": "Liest eine Notiz vor (ohne Titel: die neueste). Geschützte Notizen werden nie vorgelesen.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 80
+          }
+        }
+      }
+    },
+    {
+      "id": "note.search",
+      "tier": 1,
+      "remote": true,
+      "title": "Notizen suchen",
+      "description": "Sucht Notizen nach Titel und (bei ungeschützten) Inhalt; ohne query: die neuesten.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
       }
     }
   ]

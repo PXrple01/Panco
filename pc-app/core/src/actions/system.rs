@@ -30,7 +30,7 @@ impl Action for Lock {
         no_params(params)?;
         Ok(Plan::instant("PC sperren", |pf| {
             pf.lock()?;
-            Ok(Done { text: t("lock", &[]), mood: Mood::Info })
+            Ok(Done::new(t("lock", &[]), Mood::Info))
         }))
     }
 }
@@ -48,7 +48,7 @@ impl Action for Power {
         };
         Ok(Plan::confirm(t(what, &[]), move |pf| {
             pf.power(mode)?;
-            Ok(Done { text: t(done, &[]), mood: Mood::Info })
+            Ok(Done::new(t(done, &[]), Mood::Info))
         }))
     }
 }

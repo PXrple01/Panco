@@ -9,17 +9,22 @@
 //! Windows-spezifisches steckt ausschließlich in `platform::windows`.
 
 pub mod actions;
+pub mod backup;
 pub mod catalog;
 pub mod config;
 pub mod engine;
+pub mod files;
 pub mod fuzzy;
 pub mod log;
 pub mod normalize;
+pub mod notes;
 pub mod parser;
 pub mod platform;
 pub mod protocol;
 pub mod steam;
 pub mod texts;
+pub mod time;
+pub mod undo;
 pub mod vdf;
 
 pub use engine::{Engine, Source};

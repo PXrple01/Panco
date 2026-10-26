@@ -128,7 +128,7 @@ Windows (`tools/measure.ps1`); Werte aus der Linux-Entwicklungsumgebung klar als
 1. ✅ **Shared:** Avatar, Design-Tokens, Befehls-/Tool-Schema inkl. Stufen
 2. ✅ **PC-Kern:** Tray, Hotkeys, Overlay, Parser, Stufen-Engine, Log, Not-Aus, Programme/Steam-Spiele
 3. ✅ **Sprache:** offenes Mikro + Wake-Word, Whisper auf Abruf, Push-to-Talk, TTS, Diagnose
-4. **Dateien, Notizen, Sicherheit der Daten:** Ersteinrichtung (Papierkorb-/Backup-Ordner, Wohnort), freigegebene
+4. ✅ **Dateien, Notizen, Sicherheit der Daten:** Ersteinrichtung (Papierkorb-/Backup-Ordner, Wohnort), freigegebene
    Ordner, Dateisuche per Sprache mit Vorauswahl ("meine letzte Rechnung"), Panco-Papierkorb mit Frist,
    Stufe-2-Dateiaktionen, Notizen (verschlüsselt), Aktionsprotokoll mit Rückgängig, Backups
 5. **Zuverlässigkeit & Aktivierungs-Schutz:** Autostart + Wächter, Wake-Word-Sicherheit, Systemton-Abgleich,
@@ -150,4 +150,4 @@ Windows (`tools/measure.ps1`); Werte aus der Linux-Entwicklungsumgebung klar als
 14. **Abschluss:** README, Befehlsliste, Sicherheitskonzept, Messwerte
 
 Nach jeder Etappe committen (verständliche Nachricht) und Messwerte zeigen.
-Stand: Etappen 1–3 erledigt, als Nächstes Etappe 4.
+Stand: Etappen 1–4 erledigt, als Nächstes Etappe 5.

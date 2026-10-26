@@ -182,12 +182,15 @@ async function refresh() {
 // Nur abfragen, solange das Fenster sichtbar ist.
 function syncPolling() {
   window.clearInterval(pollTimer);
-  if (document.visibilityState === "visible") {
+  const voiceTab = document.querySelector<HTMLElement>('[data-panel="voice"]');
+  if (document.visibilityState === "visible" && !voiceTab?.hidden) {
     refresh();
     pollTimer = window.setInterval(refresh, 1000);
   }
 }
 document.addEventListener("visibilitychange", syncPolling);
+// Nur abfragen, solange der Reiter "Sprache & Diagnose" offen ist.
+document.addEventListener("panco-tab", syncPolling);
 
 // ---- Formular ----
 for (const el of document.querySelectorAll<HTMLInputElement>('input[name="mode"]'))

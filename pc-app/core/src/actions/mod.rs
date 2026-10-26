@@ -9,16 +9,21 @@
 use crate::catalog::Tier;
 use crate::config::Config;
 use crate::engine::Source;
+use crate::files::Places;
+use crate::log::ActionLog;
 use crate::platform::{Platform, PlatformError};
-use crate::protocol::Mood;
+use crate::protocol::{Choice, Mood};
 use crate::steam::Game;
+use crate::undo::UndoOp;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 mod close;
+mod files;
 mod focus;
 mod launch;
 mod media;
+mod notes;
 mod screen;
 mod system;
 mod volume;
@@ -30,6 +35,11 @@ pub struct Ctx<'a> {
     pub config: &'a Config,
     pub games: &'a [Game],
     pub source: &'a Source,
+    /// Freigegebene Ordner, Papierkorb, Notizen …
+    pub places: &'a Places,
+    pub log: &'a ActionLog,
+    /// Unix-Sekunden
+    pub now: i64,
 }
 
 /// Ergebnis einer ausgeführten Aktion.
@@ -37,11 +47,27 @@ pub struct Ctx<'a> {
 pub struct Done {
     pub text: String,
     pub mood: Mood,
+    /// Wie sich die Aktion rückgängig machen lässt (landet im Protokoll).
+    pub undo: Option<UndoOp>,
+    /// Diese Aktion hat den Protokolleintrag mit dieser ID rückgängig gemacht.
+    pub undo_of: Option<String>,
+    pub choices: Vec<Choice>,
 }
 
 impl Done {
-    pub fn ok(text: String) -> Self {
-        Done { text, mood: Mood::Success }
+    pub fn new(text: impl Into<String>, mood: Mood) -> Self {
+        Done { text: text.into(), mood, undo: None, undo_of: None, choices: Vec::new() }
+    }
+    pub fn ok(text: impl Into<String>) -> Self {
+        Self::new(text, Mood::Success)
+    }
+    pub fn undo(mut self, op: UndoOp) -> Self {
+        self.undo = Some(op);
+        self
+    }
+    pub fn choices(mut self, c: Vec<Choice>) -> Self {
+        self.choices = c;
+        self
     }
 }
 
@@ -51,11 +77,22 @@ pub type Job = Box<dyn FnOnce(&dyn Platform) -> Result<Done, ActionError> + Send
 pub enum Plan {
     /// Parameter geprüft, Ziel aufgelöst. `tier` kann über der Katalog-Mindeststufe liegen.
     Ready { tier: Tier, what: String, job: Job },
-    /// Unsicher ("Meinst du Deadlock?"): bei Ja wird die Aktion mit `params` neu vorbereitet.
-    Clarify { question: String, params: Value },
+    /// Rückfrage ("Meinst du Deadlock?" / "Gefunden: X. Öffnen?"): bei Ja wird `action` (oder dieselbe
+    /// Aktion) mit `params` neu vorbereitet. `choices` = Alternativen zum Anklicken.
+    Clarify { question: String, params: Value, action: Option<&'static str>, choices: Vec<Choice> },
 }
 
 impl Plan {
+    pub fn clarify(question: impl Into<String>, params: Value) -> Self {
+        Plan::Clarify { question: question.into(), params, action: None, choices: Vec::new() }
+    }
+    pub fn ready(
+        tier: Tier,
+        what: impl Into<String>,
+        job: impl FnOnce(&dyn Platform) -> Result<Done, ActionError> + Send + 'static,
+    ) -> Self {
+        Plan::Ready { tier, what: what.into(), job: Box::new(job) }
+    }
     pub fn instant(
         what: impl Into<String>,
         job: impl FnOnce(&dyn Platform) -> Result<Done, ActionError> + Send + 'static,
@@ -143,5 +180,17 @@ pub fn registry() -> Vec<Box<dyn Action>> {
         Box::new(screen::Screenshot),
         Box::new(system::Lock),
         Box::new(system::Power),
+        Box::new(files::FileSearch),
+        Box::new(files::FileOpen),
+        Box::new(files::FileDelete),
+        Box::new(files::FileMove),
+        Box::new(files::FileRename),
+        Box::new(files::FolderCreate),
+        Box::new(files::TrashRestore),
+        Box::new(files::Undo),
+        Box::new(notes::NoteCreate),
+        Box::new(notes::NoteAppend),
+        Box::new(notes::NoteRead),
+        Box::new(notes::NoteSearch),
     ]
 }

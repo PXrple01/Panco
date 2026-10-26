@@ -13,7 +13,7 @@ impl Action for Screenshot {
         no_params(params)?;
         Ok(Plan::instant("Screenshot machen", |pf| {
             pf.screenshot()?;
-            Ok(Done { text: t("screenshot", &[]), mood: Mood::Info })
+            Ok(Done::new(t("screenshot", &[]), Mood::Info))
         }))
     }
 }

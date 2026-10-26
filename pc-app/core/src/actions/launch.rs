@@ -57,10 +57,7 @@ impl Action for AppLaunch {
             Resolved::Sure((target, _)) => Ok(plan_for(target)),
             Resolved::Unsure((target, _)) => {
                 let name = target.name();
-                Ok(Plan::Clarify {
-                    question: t("did_you_mean", &[("name", &name)]),
-                    params: serde_json::json!({ "target": name }),
-                })
+                Ok(Plan::clarify(t("did_you_mean", &[("name", &name)]), serde_json::json!({ "target": name })))
             }
             Resolved::None => Err(ActionError::NotFound(t("not_found", &[("name", &display_name(&query))]))),
         }
@@ -74,7 +71,7 @@ fn plan_for(target: &Target) -> Plan {
             let uri = format!("steam://rungameid/{}", g.app_id);
             Plan::instant(format!("{name} starten"), move |pf| {
                 pf.open(&uri, &[])?;
-                Ok(Done { text: t("launch_game", &[("name", &name)]), mood: Mood::Game })
+                Ok(Done::new(t("launch_game", &[("name", &name)]), Mood::Game))
             })
         }
         Target::App(a) => {

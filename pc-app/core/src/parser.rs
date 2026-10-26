@@ -49,6 +49,7 @@ fn cap<'a>(c: &'a Captures, i: usize) -> &'a str {
 }
 
 const PC: &str = r"(?:den |die |das )?(?:pc|computer|rechner|kiste|laptop)";
+const UNDO: &str = r"r(?:ü|u|ö|ue|oe)ckg(?:ä|a|ae)ngig";
 
 static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
@@ -79,9 +80,18 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
             ),
             |_| intent("system.lock", json!({})),
         ),
-        rule(r"(?:screenshot|screen shot|bildschirmfoto|bildschirmaufnahme)", |_| {
-            intent("screen.screenshot", json!({}))
-        }),
+        rule(
+            r"^(?:(?:mach|mache|nimm|nehme)(?: mir)? )?(?:einen |ein )?(?:screenshot|screen shot|bildschirmfoto|bildschirmaufnahme)(?: machen)?$",
+            |_| intent("screen.screenshot", json!({})),
+        ),
+        // --- Rückgängig ---
+        rule(
+            // "röckgängig", "macht das …": typische Whisper-Varianten
+            &format!(
+                r"^(?:(?:mach|mache|macht) (?:das |es |den letzten schritt )?{UNDO}|{UNDO}(?: machen)?|undo|(?:hol|hole|stell|stelle) (?:das|es) wieder (?:her|zurück))$"
+            ),
+            |_| intent("panco.undo", json!({})),
+        ),
         // --- Ton ---
         rule(r"^(?:ton aus|stumm|stummschalten|schalt(?:e)? (?:den ton |alles )?stumm|mute|lautlos)$", |_| {
             intent("volume.mute", json!({"mute": true}))
@@ -127,6 +137,25 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         rule(r"^(?:stopp|stop|stoppe die musik|musik stoppen)$", |_| {
             intent("media.control", json!({"command": "stop"}))
         }),
+        // --- Dateien (vor Web-Suche und "öffne X") ---
+        rule(r"^(?:finde|findet|finden|find|wo ist|wo sind|wo liegt|wo liegen)(?: mir)? (.+)$", |c| {
+            intent("file.search", json!({"query": cap(c, 1)}))
+        }),
+        rule(
+            r"^(?:such|suche|sucht|zeig|zeige)(?: mir)? (?:nach )?((?:meine[nrms]?|der datei|die datei|den ordner|die dateien|das dokument|datei|dateien|ordner|dokument) .+)$",
+            |c| intent("file.search", json!({"query": cap(c, 1)})),
+        ),
+        rule(
+            r"^(?:öffne|öffnen|mach|mache) ((?:meine[nrms]?|die datei|das dokument|den ordner) .+?)(?: auf)?$",
+            |c| intent("file.search", json!({"query": cap(c, 1), "open": true})),
+        ),
+        rule(r"^(?:lösch|lösche|löschen|entfern|entferne) (.+)$", |c| {
+            intent("file.delete", json!({"path": cap(c, 1)}))
+        }),
+        rule(
+            r"^(?:verschieb|verschiebe|schieb|schiebe|pack|packe) (.+?) (?:nach|in|zu|auf) (?:den |die |das |meine |meinen |ordner )*(.+?)(?: rein)?$",
+            |c| intent("file.move", json!({"path": cap(c, 1), "to": cap(c, 2)})),
+        ),
         // --- Web ---
         rule(r"^(?:öffne|öffnen|geh auf|gehe auf) (?:die )?(?:webseite|website|seite|url) (.+)$", |c| {
             let site = cap(c, 1).trim();
@@ -172,6 +201,129 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         }),
     ]
 });
+
+/// Regeln auf dem Originaltext – für Inhalte, deren Schreibweise zählt (Notiztitel/-text, neue Namen).
+static ORIGINAL_RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
+    const NOTE_VERB: &str = r"(?:erstell|erstelle|leg|lege|mach|mache|schreib|schreibe|notier|notiere)";
+    vec![
+        // "Erstelle eine neue Notiz und nenne sie Passwörter", "Neue Notiz Einkauf: Milch"
+        rule(
+            &format!(
+                r"(?i)^(?:{NOTE_VERB}\s+(?:mir\s+)?(?:eine\s+)?|eine\s+)?neue\s+(geheime\s+)?notiz(?:\s+an)?(?:\s*,?\s*(?:und\s+)?(?:nenn|nenne)\s+sie|\s+mit\s+dem\s+(?:titel|namen)|\s+namens|\s+mit\s+titel|\s+zum\s+thema|\s+über)?\s*[,:]?\s*(.*)$"
+            ),
+            |c| note_create(c.get(1).is_some(), cap(c, 2)),
+        ),
+        rule(
+            &format!(
+                r"(?i)^{NOTE_VERB}\s+(?:mir\s+)?(?:eine\s+)?(geheime\s+)?notiz(?:\s+an)?(?:\s*,?\s*(?:und\s+)?(?:nenn|nenne)\s+sie|\s+mit\s+dem\s+(?:titel|namen)|\s+namens|\s+mit\s+titel|\s+zum\s+thema|\s+über)?\s*[,:]?\s*(.*)$"
+            ),
+            |c| note_create(c.get(1).is_some(), cap(c, 2)),
+        ),
+        // "Notiz: Milch kaufen"
+        rule(r"(?i)^notiz\s*[:,]\s*(.+)$", |c| intent("note.append", json!({"text": cap(c, 1)}))),
+        // "Füge zur Notiz Einkauf hinzu: Brot", "Schreib in die Notiz Einkauf: Brot"
+        rule(
+            r"(?i)^(?:füg|füge|schreib|schreibe|trag|trage|setz|setze)\s+(?:zur|zu\s+der|in\s+die|auf\s+die)\s+notiz\s+(.+?)(?:\s+hinzu)?\s*[:,]\s*(.+?)(?:\s+hinzu)?$",
+            |c| intent("note.append", json!({"title": cap(c, 1), "text": cap(c, 2)})),
+        ),
+        // "Füge Brot zur Notiz Einkauf hinzu"
+        rule(
+            r"(?i)^(?:füg|füge|schreib|schreibe|setz|setze)\s+(.+?)\s+(?:zur|zu\s+der|auf\s+die)\s+notiz\s+(.+?)(?:\s+hinzu)?$",
+            |c| intent("note.append", json!({"title": cap(c, 2), "text": cap(c, 1)})),
+        ),
+        // "Lies die Notiz Einkauf vor", "Lies meine letzte Notiz vor"
+        rule(
+            r"(?i)^(?:lies|lese|les)\s+(?:mir\s+)?(?:die\s+|meine\s+)?(?:letzte\s+|neueste\s+)?notiz\s*(.*?)(?:\s+vor)?$",
+            |c| {
+                let title = cap(c, 1).trim();
+                let title = if title.eq_ignore_ascii_case("vor") { "" } else { title };
+                intent("note.read", if title.is_empty() { json!({}) } else { json!({"title": title}) })
+            },
+        ),
+        // "Such in meinen Notizen nach Steam", "Welche Notizen habe ich?"
+        rule(r"(?i)^(?:such|suche|finde)\s+(?:in\s+)?(?:meinen\s+|den\s+)?notizen\s+(?:nach\s+)?(.+)$", |c| {
+            intent("note.search", json!({"query": cap(c, 1)}))
+        }),
+        rule(r"(?i)^(?:welche\s+notizen.*|(?:zeig|zeige)(?:\s+mir)?\s+(?:meine|alle)\s+notizen)$", |_| {
+            intent("note.search", json!({}))
+        }),
+        // "Benenne die Rechnung Telekom in Telekom Oktober um"
+        rule(
+            r"(?i)^(?:benenn|benenne)\s+(?:die\s+datei\s+|den\s+ordner\s+|das\s+dokument\s+)?(.+?)\s+(?:in|zu|nach)\s+(.+?)\s+um$",
+            |c| intent("file.rename", json!({"path": cap(c, 1), "name": cap(c, 2)})),
+        ),
+        // "Erstelle einen Ordner Steuer 2025 auf dem Desktop"
+        rule(
+            r"(?i)^(?:erstell|erstelle|leg|lege|mach|mache)\s+(?:mir\s+)?(?:einen\s+)?(?:neuen\s+)?ordner(?:\s+an)?(?:\s+(?:namens|mit\s+dem\s+namen|der))?\s+(.+?)(?:\s+(?:in|auf|im|unter)\s+(?:den\s+|dem\s+|meinen\s+|meine\s+|die\s+)?(dokumente|dokumenten|downloads|desktop|schreibtisch|bilder|bildern|musik|videos|notizen))?(?:\s+an)?$",
+            |c| {
+                // "Dokumenten"/"Bildern" (Dativ) → "dokumente"/"bilder"
+                let parent = match cap(c, 2).to_lowercase().as_str() {
+                    "dokumenten" => "dokumente".to_string(),
+                    "bildern" => "bilder".to_string(),
+                    other => other.to_string(),
+                };
+                let mut params = json!({"name": cap(c, 1)});
+                if !parent.is_empty() {
+                    params["parent"] = json!(parent);
+                }
+                intent("folder.create", params)
+            },
+        ),
+    ]
+});
+
+fn note_create(secret: bool, rest: &str) -> Option<Intent> {
+    // "Einkauf: Milch, Eier" → Titel + erster Text. Whisper schreibt statt ":" oft ",".
+    let (title, text) = match rest.split_once(':').or_else(|| rest.split_once(',')) {
+        Some((t, x)) => (t.trim(), x.trim()),
+        None => (rest.trim(), ""),
+    };
+    let title = match title.chars().next() {
+        None => crate::texts::t("quick_note_title", &[]),
+        Some(c) => c.to_uppercase().chain(title.chars().skip(1)).collect(),
+    };
+    let mut p = json!({"title": title});
+    if !text.is_empty() {
+        p["text"] = json!(text);
+    }
+    if secret {
+        p["secret"] = json!(true);
+    }
+    intent("note.create", p)
+}
+
+/// Anrede/Wake-Word vorne und Satzzeichen hinten entfernen – Groß-/Kleinschreibung bleibt.
+fn strip_greeting(text: &str) -> String {
+    let mut s = text.trim().trim_end_matches(['.', '!', '?']).trim().to_string();
+    while let Some(first) = s.split_whitespace().next() {
+        let word = first.trim_end_matches([',', '.', '!', ':']).to_lowercase();
+        let greeting =
+            matches!(word.as_str(), "hey" | "hallo" | "ok" | "okay" | "bitte") || normalize::is_wake_word(&word);
+        if s.split_whitespace().count() > 1 && greeting {
+            s = s[first.len()..].trim_start_matches([',', ' ']).trim_start().to_string();
+        } else {
+            break;
+        }
+    }
+    s
+}
+
+/// Versteht einen Originaltext (getippt oder transkribiert). `None` = nicht verstanden.
+pub fn parse_text(original: &str) -> Option<Intent> {
+    let stripped = strip_greeting(original);
+    ORIGINAL_RULES
+        .iter()
+        .find_map(|r| r.re.captures(&stripped).and_then(|c| (r.build)(&c)))
+        .or_else(|| parse(&normalize::command(original)))
+}
+
+/// Gesprochen: Reste des Wake-Words ("…co, öffne X") stehen manchmal noch vorne – dann ohne erstes Wort.
+pub fn parse_text_lenient(original: &str) -> Option<Intent> {
+    parse_text(original).or_else(|| {
+        let stripped = strip_greeting(original);
+        stripped.split_once(char::is_whitespace).and_then(|(_, rest)| parse_text(rest))
+    })
+}
 
 /// Versteht einen bereits normalisierten Befehl. `None` = nicht verstanden.
 pub fn parse(normalized: &str) -> Option<Intent> {
@@ -220,7 +372,7 @@ mod tests {
     use super::*;
 
     fn p(text: &str) -> Option<(&'static str, Value)> {
-        parse(&normalize::command(text)).map(|i| (i.action, i.params))
+        parse_text(text).map(|i| (i.action, i.params))
     }
 
     #[test]
@@ -294,6 +446,85 @@ mod tests {
         assert_eq!(p("mach einen Screenshot"), Some(("screen.screenshot", json!({}))));
         assert_eq!(p("blablub"), None);
         assert_eq!(p(""), None);
+    }
+
+    #[test]
+    fn files() {
+        assert_eq!(
+            p("Panco, finde meine letzte Rechnung"),
+            Some(("file.search", json!({"query": "meine letzte rechnung"})))
+        );
+        // Whisper konjugiert gern falsch
+        assert_eq!(
+            p("Paanco findet meine letzte Rechnung."),
+            Some(("file.search", json!({"query": "meine letzte rechnung"})))
+        );
+        assert_eq!(p("wo ist meine Bewerbung?"), Some(("file.search", json!({"query": "meine bewerbung"}))));
+        assert_eq!(
+            p("zeig mir meine Screenshots von gestern"),
+            Some(("file.search", json!({"query": "meine screenshots von gestern"})))
+        );
+        assert_eq!(p("such die Datei Steuer"), Some(("file.search", json!({"query": "die datei steuer"}))));
+        assert_eq!(p("such deadlock build guides"), Some(("web.search", json!({"query": "deadlock build guides"}))));
+        assert_eq!(
+            p("Öffne meine letzte Rechnung"),
+            Some(("file.search", json!({"query": "meine letzte rechnung", "open": true})))
+        );
+        assert_eq!(
+            p("lösche die Datei Rechnung Telekom"),
+            Some(("file.delete", json!({"path": "die datei rechnung telekom"})))
+        );
+        assert_eq!(
+            p("verschiebe meine letzte Rechnung nach Dokumente"),
+            Some(("file.move", json!({"path": "meine letzte rechnung", "to": "dokumente"})))
+        );
+        assert_eq!(
+            p("Benenne die Rechnung Telekom in Telekom Oktober um."),
+            Some(("file.rename", json!({"path": "die Rechnung Telekom", "name": "Telekom Oktober"})))
+        );
+        assert_eq!(
+            p("Erstelle einen Ordner Steuer 2025 auf dem Desktop"),
+            Some(("folder.create", json!({"name": "Steuer 2025", "parent": "desktop"})))
+        );
+        assert_eq!(p("Leg einen neuen Ordner Projekte an"), Some(("folder.create", json!({"name": "Projekte"}))));
+        assert_eq!(p("mach einen Screenshot"), Some(("screen.screenshot", json!({}))));
+        assert_eq!(p("mach das rückgängig"), Some(("panco.undo", json!({}))));
+        assert_eq!(p("Panko, macht das Röckgängig."), Some(("panco.undo", json!({}))));
+        assert_eq!(p("Rückgängig!"), Some(("panco.undo", json!({}))));
+    }
+
+    #[test]
+    fn notes() {
+        assert_eq!(
+            p("Panco, erstelle eine neue Notiz und nenne sie Passwörter."),
+            Some(("note.create", json!({"title": "Passwörter"})))
+        );
+        assert_eq!(
+            p("Neue Notiz Einkauf: Milch, Eier"),
+            Some(("note.create", json!({"title": "Einkauf", "text": "Milch, Eier"})))
+        );
+        // So transkribiert Whisper den Doppelpunkt
+        assert_eq!(
+            p("Panco, neue Notiz einkauf, Milch und Brot."),
+            Some(("note.create", json!({"title": "Einkauf", "text": "Milch und Brot"})))
+        );
+        assert_eq!(
+            p("Mach mir eine geheime Notiz Tresor"),
+            Some(("note.create", json!({"title": "Tresor", "secret": true})))
+        );
+        assert_eq!(p("Notiz: Milch kaufen."), Some(("note.append", json!({"text": "Milch kaufen"}))));
+        assert_eq!(
+            p("Füge zur Notiz Einkauf hinzu: Brot"),
+            Some(("note.append", json!({"title": "Einkauf", "text": "Brot"})))
+        );
+        assert_eq!(
+            p("Füge Brot zur Notiz Einkauf hinzu"),
+            Some(("note.append", json!({"title": "Einkauf", "text": "Brot"})))
+        );
+        assert_eq!(p("Lies die Notiz Einkauf vor"), Some(("note.read", json!({"title": "Einkauf"}))));
+        assert_eq!(p("lies meine letzte Notiz vor"), Some(("note.read", json!({}))));
+        assert_eq!(p("Welche Notizen habe ich?"), Some(("note.search", json!({}))));
+        assert_eq!(p("Such in meinen Notizen nach Steam"), Some(("note.search", json!({"query": "Steam"}))));
     }
 
     #[test]

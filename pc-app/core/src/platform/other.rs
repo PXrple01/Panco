@@ -56,6 +56,19 @@ impl Platform for OtherPlatform {
     fn process_stats(&self) -> PResult<ProcStats> {
         linux_stats().ok_or(PlatformError::Unsupported)
     }
+    fn reveal(&self, path: &std::path::Path) -> PResult<()> {
+        let dir = if path.is_dir() { path } else { path.parent().unwrap_or(path) };
+        self.open(&dir.to_string_lossy(), &[])
+    }
+    fn protect(&self, _: &[u8]) -> PResult<Vec<u8>> {
+        Err(PlatformError::Unsupported)
+    }
+    fn unprotect(&self, _: &[u8]) -> PResult<Vec<u8>> {
+        Err(PlatformError::Unsupported)
+    }
+    fn utc_offset_secs(&self) -> i32 {
+        0
+    }
 }
 
 /// Linux (Entwicklung): /proc lesen. USS = privater Speicher.

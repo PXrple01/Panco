@@ -44,7 +44,7 @@ impl Action for WindowFocus {
                 let (id, name) = (*id, display_name(proc_name));
                 Ok(Plan::instant(format!("zu {name} wechseln"), move |pf| {
                     pf.focus_window(id)?;
-                    Ok(Done { text: t("focus_window", &[("name", &name)]), mood: Mood::Info })
+                    Ok(Done::new(t("focus_window", &[("name", &name)]), Mood::Info))
                 }))
             }
             Resolved::None => Err(ActionError::NotFound(t("not_found", &[("name", &display_name(&query))]))),

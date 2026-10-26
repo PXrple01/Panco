@@ -75,6 +75,13 @@ pub trait Platform: Send + Sync {
     fn close_process(&self, process: &str) -> PResult<usize>;
     /// RAM/CPU von Panco und seinen Kindprozessen (nur für das Diagnosefenster).
     fn process_stats(&self) -> PResult<ProcStats>;
+    /// Datei im Explorer anzeigen (Ordner öffnen, Datei markiert).
+    fn reveal(&self, path: &std::path::Path) -> PResult<()>;
+    /// Verschlüsseln, gebunden an das Windows-Benutzerkonto (DPAPI). Für sensible Notizen.
+    fn protect(&self, data: &[u8]) -> PResult<Vec<u8>>;
+    fn unprotect(&self, data: &[u8]) -> PResult<Vec<u8>>;
+    /// Versatz der lokalen Zeit zu UTC in Sekunden (inkl. Sommerzeit).
+    fn utc_offset_secs(&self) -> i32;
 }
 
 /// Die echte Plattform des laufenden Systems.

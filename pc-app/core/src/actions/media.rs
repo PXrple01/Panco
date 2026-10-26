@@ -36,7 +36,7 @@ impl Action for MediaControl {
         };
         Ok(Plan::instant(t(text, &[]), move |pf| {
             pf.media_key(key)?;
-            Ok(Done { text: t(text, &[]), mood: Mood::Info })
+            Ok(Done::new(t(text, &[]), Mood::Info))
         }))
     }
 }

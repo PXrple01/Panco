@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>Panco – Ersteinrichtung</title>
+</head>
+<body>
+  <main class="page">
+    <header class="head">
+      <div id="avatar" class="head__avatar"></div>
+      <div>
+        <h1>Hallo, ich bin Panco.</h1>
+        <p class="dim">Kurz einrichten – alles lässt sich später in den Einstellungen ändern.</p>
+      </div>
+    </header>
+
+    <div id="step-folders">
+      <div id="folders"></div>
+      <section class="card">
+        <h2>Wohnort <span class="dim small">(optional)</span></h2>
+        <p class="dim small">Für das Wetter beim Guten-Morgen. Wird erst genutzt, wenn du das einschaltest.</p>
+        <input id="city" class="path-input" placeholder="z. B. Hamburg" maxlength="80" />
+      </section>
+      <p class="error" id="error" hidden></p>
+      <div class="actions">
+        <button id="save" class="btn btn--accent" type="button">Speichern & weiter</button>
+      </div>
+    </div>
+
+    <section class="card" id="step-done" hidden>
+      <h2>Fast fertig!</h2>
+      <p>Jetzt noch die Stimme: Sprachmodell herunterladen (57 MB, einmalig) und sechsmal „Panco“ sagen.</p>
+      <p class="dim small">Panco läuft ab jetzt im Infobereich (der Panda unten rechts). Strg + Leertaste öffnet die Befehlszeile.</p>
+      <div class="actions">
+        <button id="finish" class="btn btn--accent" type="button">Weiter zur Spracheinrichtung</button>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="./src/setup.ts"></script>
+</body>
+</html>

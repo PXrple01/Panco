@@ -16,7 +16,7 @@ body {
 
 .card {
   box-sizing: border-box;
-  height: 100%;
+  min-height: 100%;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -208,4 +208,42 @@ kbd {
 .reduce-motion *::before {
   animation-duration: 1ms !important;
   transition-duration: 1ms !important;
+}
+
+/* Auswahl (Suchtreffer, Notizen …) */
+.choices {
+  display: grid;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.choice {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  text-align: left;
+  font: 14px var(--pc-font);
+  color: var(--pc-text);
+  padding: 6px 10px;
+  border-radius: var(--pc-radius-s);
+  border: 1px solid var(--pc-line);
+  background: rgba(10, 10, 15, 0.45);
+  cursor: pointer;
+}
+.choice:hover,
+.choice:focus-visible {
+  outline: none;
+  border-color: var(--pc-accent);
+  box-shadow: var(--pc-glow);
+}
+.choice__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.choice__detail {
+  color: var(--pc-text-dim);
+  font-size: 12px;
+  white-space: nowrap;
 }

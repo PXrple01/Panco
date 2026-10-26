@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "panco-windows",
-  "description": "Overlay und Einstellungsfenster dürfen nur Events empfangen; alles andere läuft über die Panco-Befehle (Whitelist in main.rs).",
-  "windows": ["overlay", "settings"],
+  "description": "Overlay, Einstellungen und Ersteinrichtung dürfen nur Events empfangen; alles andere läuft über die Panco-Befehle (Whitelist in main.rs).",
+  "windows": ["overlay", "settings", "setup"],
   "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
 }

@@ -38,7 +38,16 @@ fn messages_match_shared_schema() {
             tier: 2,
             expires_in_ms: 30000,
             pc_only: true,
+            choices: vec![],
         },
+        ServerMessage::reply("2", true, "Gefunden.", Mood::Info, Some("file.search")).with_choices(vec![
+            panco_core::protocol::Choice {
+                label: "Rechnung.pdf".into(),
+                detail: Some("Downloads · gestern".into()),
+                action: "file.open".into(),
+                params: json!({"path": "C:/x/Rechnung.pdf"}),
+            },
+        ]),
         ServerMessage::State {
             avatar: AvatarState::Listening,
             mic: MicState::Recording,

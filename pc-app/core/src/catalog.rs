@@ -35,6 +35,9 @@ pub struct ActionSpec {
     pub title: String,
     pub description: String,
     pub params: serde_json::Value,
+    /// Inhalte (Text-Parameter, erkannter Satz, Antwort) nicht ins Protokoll schreiben.
+    #[serde(default)]
+    pub redact: bool,
 }
 
 #[derive(Debug, Deserialize)]

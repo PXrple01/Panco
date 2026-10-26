@@ -191,3 +191,136 @@ code {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+
+/* ---------- Reiter ---------- */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--pc-line);
+  padding-bottom: 6px;
+}
+.tab {
+  font: 600 13px var(--pc-font);
+  color: var(--pc-text-dim);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--pc-radius-s);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.tab[aria-selected="true"] {
+  color: var(--pc-text);
+  border-color: var(--pc-accent);
+  box-shadow: var(--pc-glow);
+}
+.panel {
+  display: grid;
+  gap: 14px;
+}
+
+/* ---------- Formulare, Listen ---------- */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.path-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.path-input {
+  min-width: 0;
+  flex: 1;
+  background: var(--pc-bg-0);
+  color: var(--pc-text);
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-s);
+  padding: 6px 10px;
+  font: 13px var(--pc-font);
+}
+.btn--small {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.folder-list,
+.rows {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.folder-list li,
+.rows li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-s);
+  font-size: 13px;
+}
+.path,
+.row-main {
+  overflow-wrap: anywhere;
+}
+.row-sub {
+  display: block;
+  color: var(--pc-text-dim);
+  font-size: 12px;
+}
+.log-list li.is-failed .row-main {
+  color: var(--pc-danger);
+}
+.log-list li.is-undone {
+  opacity: 0.55;
+}
+.notes {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) 1fr;
+  gap: 10px;
+  align-items: start;
+}
+#folders,
+#step-folders {
+  display: grid;
+  gap: 14px;
+}
+@media (max-width: 520px) {
+  .notes {
+    grid-template-columns: 1fr;
+  }
+}
+.note-list {
+  align-content: start;
+}
+.note-list li {
+  cursor: pointer;
+  grid-template-columns: 1fr;
+}
+.note-list li.is-active {
+  border-color: var(--pc-accent);
+}
+.note-editor textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 220px;
+  resize: vertical;
+  background: var(--pc-bg-0);
+  color: var(--pc-text);
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-s);
+  padding: 8px 10px;
+  font: 13px / 1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+.note-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}

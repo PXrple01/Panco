@@ -1,23 +1,27 @@
-//! Engine: verbindet Parser, Whitelist, Stufen, Bestätigungen und Protokoll.
+//! Engine: verbindet Parser, Whitelist, Stufen, Bestätigungen, Rückgängig und Protokoll.
 //!
 //! Sicherheitsregeln (siehe CLAUDE.md), alle hier durchgesetzt:
 //! - Not-Aus aus → nichts wird ausgeführt.
 //! - Nur Aktionen aus dem Katalog; Remote nur, wenn `remote: true`.
 //! - Stufe 1 sofort; Stufe 2 Bestätigung (Sprache/Overlay); Stufe 3 nur Klick am PC, nie remote.
 //! - Anfragen vom iPhone oder von Claude: Stufe 2/3 immer per Klick am PC bestätigen.
-//! - Jede Entscheidung landet im Protokoll.
+//! - Jede Entscheidung landet im Protokoll; sensible Inhalte (`redact`) nur geschwärzt.
 
-use crate::actions::{self, Action, ActionError, Ctx, Job, Plan};
-use crate::catalog::{self, Tier};
+use crate::actions::{self, Action, ActionError, Ctx, Done, Job, Plan};
+use crate::catalog::{self, ActionSpec, Tier};
 use crate::config::Config;
+use crate::files::trash::Trash;
+use crate::files::Places;
 use crate::log::{ActionLog, Entry};
 use crate::normalize;
 use crate::parser;
 use crate::platform::Platform;
-use crate::protocol::{ClientMessage, Mood, ServerMessage};
+use crate::protocol::{Choice, ClientMessage, Mood, ServerMessage};
 use crate::steam::{self, Game};
 use crate::texts::t;
+use crate::undo::UndoOp;
 use serde_json::Value;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -25,13 +29,13 @@ use std::time::{Duration, Instant};
 /// Woher ein Befehl kommt.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Source {
-    /// Getippt im Overlay am PC.
+    /// Getippt im Overlay oder geklickt im Einstellungsfenster am PC.
     Text,
     /// Gesprochen am PC (Wake-Word oder Push-to-Talk).
     Voice,
     /// Vom gekoppelten iPhone.
     Remote { device: String },
-    /// Tool-Aufruf von Claude (Etappe 6).
+    /// Tool-Aufruf von Claude (Etappe 7).
     Claude,
 }
 
@@ -45,12 +49,12 @@ impl Source {
         }
     }
 
-    fn is_remote(&self) -> bool {
+    pub fn is_remote(&self) -> bool {
         matches!(self, Source::Remote { .. })
     }
 
     /// Kommt die Anfrage nicht direkt vom Menschen am PC?
-    fn is_indirect(&self) -> bool {
+    pub fn is_indirect(&self) -> bool {
         matches!(self, Source::Remote { .. } | Source::Claude)
     }
 }
@@ -70,28 +74,35 @@ enum PendingKind {
     Run {
         job: Job,
     },
-    /// "Meinst du …?" – bei Ja wird die Aktion mit diesen Parametern neu vorbereitet.
+    /// Rückfrage – bei Ja wird `action` mit diesen Parametern neu vorbereitet.
     Clarify {
+        action: String,
         params: Value,
     },
 }
 
 struct Pending {
     confirm_id: String,
+    meta: Meta,
+    pc_only: bool,
+    created: Instant,
+    kind: PendingKind,
+}
+
+/// Was zu einer Anfrage für Antwort und Protokoll gebraucht wird.
+struct Meta {
     request_id: String,
     source: Source,
     text: Option<String>,
     action: String,
     params: Value,
     tier: u8,
-    pc_only: bool,
-    created: Instant,
-    kind: PendingKind,
 }
 
 pub struct Engine {
     platform: Arc<dyn Platform>,
     config: RwLock<Config>,
+    data_dir: RwLock<PathBuf>,
     games: RwLock<Option<Vec<Game>>>,
     log: ActionLog,
     enabled: AtomicBool,
@@ -105,6 +116,7 @@ impl Engine {
         Self {
             platform,
             config: RwLock::new(config),
+            data_dir: RwLock::new(crate::config::data_dir()),
             games: RwLock::new(None),
             log,
             enabled: AtomicBool::new(true),
@@ -122,12 +134,8 @@ impl Engine {
         if !on {
             self.pending.lock().unwrap().take();
         }
-        self.log_simple(
-            &Source::Text,
-            None,
-            if on { "enabled" } else { "disabled" },
-            if on { "Not-Aus aufgehoben" } else { "Not-Aus aktiviert" },
-        );
+        let msg = if on { "Not-Aus aufgehoben" } else { "Not-Aus aktiviert" };
+        self.log_plain(&Source::Text, None, if on { "enabled" } else { "disabled" }, msg);
     }
 
     pub fn enabled(&self) -> bool {
@@ -140,6 +148,23 @@ impl Engine {
 
     pub fn set_config(&self, config: Config) {
         *self.config.write().unwrap() = config;
+    }
+
+    /// Panco-Datenordner (Standard `%APPDATA%\Panco`; Tests setzen einen eigenen).
+    pub fn set_data_dir(&self, dir: PathBuf) {
+        *self.data_dir.write().unwrap() = dir;
+    }
+
+    pub fn data_dir(&self) -> PathBuf {
+        self.data_dir.read().unwrap().clone()
+    }
+
+    pub fn places(&self) -> Places {
+        Places::from_settings(&self.config.read().unwrap().files, &self.data_dir())
+    }
+
+    pub fn trash(&self) -> Trash {
+        Trash::new(self.places().trash)
     }
 
     pub fn log(&self) -> &ActionLog {
@@ -193,7 +218,7 @@ impl Engine {
     /// Freier Text (getippt/gesprochen/vom iPhone).
     pub fn command(&self, id: &str, text: &str, source: Source) -> ServerMessage {
         if !self.enabled() {
-            self.log_simple(&source, Some(text), "disabled", "Not-Aus aktiv");
+            self.log_plain(&source, Some(text), "disabled", "Not-Aus aktiv");
             return self.reply_fail(id, t("disabled", &[]), Mood::Error);
         }
         let norm = normalize::command(text);
@@ -209,24 +234,24 @@ impl Engine {
             }
         }
 
-        // Gesprochen: Reste des Wake-Words ("…co, öffne X") stehen manchmal noch vorne – dann ohne erstes Wort.
-        let intent = parser::parse(&norm).or_else(|| match source {
-            Source::Voice => norm.split_once(' ').and_then(|(_, rest)| parser::parse(rest)),
-            _ => None,
-        });
+        let intent = match source {
+            // Gesprochen: Reste des Wake-Words vorne werden toleriert.
+            Source::Voice => parser::parse_text_lenient(text),
+            _ => parser::parse_text(text),
+        };
         match intent {
             Some(intent) => self.run(id, intent.action, intent.params, source, Some(text.to_string())),
             None => {
-                self.log_simple(&source, Some(text), "not_understood", "");
+                self.log_plain(&source, Some(text), "not_understood", "");
                 self.reply_fail(id, t("not_understood", &[]), Mood::Confused)
             }
         }
     }
 
-    /// Direkter Aktionsaufruf (Kacheln, später Claude-Tools).
+    /// Direkter Aktionsaufruf (Kacheln, Auswahlknöpfe, Einstellungen, später Claude-Tools).
     pub fn invoke(&self, id: &str, action: &str, params: Value, source: Source) -> ServerMessage {
         if !self.enabled() {
-            self.log_simple(&source, None, "disabled", "Not-Aus aktiv");
+            self.log_plain(&source, None, "disabled", "Not-Aus aktiv");
             return self.reply_fail(id, t("disabled", &[]), Mood::Error);
         }
         self.run(id, action, params, source, None)
@@ -245,154 +270,106 @@ impl Engine {
         let timeout = Duration::from_secs(self.config.read().unwrap().confirm_timeout_secs);
         if p.created.elapsed() > timeout {
             drop(slot);
-            self.log_pending(&p, "expired", "");
-            return self.reply_fail(&p.request_id, t("confirm_expired", &[]), Mood::Info);
+            self.log_meta(&p.meta, "expired", "", None, None);
+            return self.reply_fail(&p.meta.request_id, t("confirm_expired", &[]), Mood::Info);
         }
 
         // Darf diese Antwortart diese Frage beantworten?
         let allowed = match via {
             ConfirmVia::PcClick => true,
             ConfirmVia::Spoken => !p.pc_only,
-            ConfirmVia::Remote => matches!(p.kind, PendingKind::Clarify { .. }) && p.source.is_remote(),
+            ConfirmVia::Remote => matches!(p.kind, PendingKind::Clarify { .. }) && p.meta.source.is_remote(),
         };
         if !allowed {
-            let id = p.request_id.clone();
+            let id = p.meta.request_id.clone();
             *slot = Some(p); // Frage bleibt offen
             return self.reply_fail(&id, t("pc_confirm_needed", &[]), Mood::Info);
         }
         drop(slot);
 
         if !self.enabled() {
-            return self.reply_fail(&p.request_id, t("disabled", &[]), Mood::Error);
+            return self.reply_fail(&p.meta.request_id, t("disabled", &[]), Mood::Error);
         }
         if !accept {
-            self.log_pending(&p, "cancelled", "");
-            return ServerMessage::reply(&p.request_id, true, t("confirm_cancelled", &[]), Mood::Info, Some(&p.action));
+            self.log_meta(&p.meta, "cancelled", "", None, None);
+            let action = p.meta.action.clone();
+            return ServerMessage::reply(
+                &p.meta.request_id,
+                true,
+                t("confirm_cancelled", &[]),
+                Mood::Info,
+                Some(&action),
+            );
         }
         match p.kind {
             PendingKind::Run { job } => {
                 let result = job(self.platform.as_ref());
-                let request = PendingMeta {
-                    request_id: p.request_id,
-                    source: p.source,
-                    text: p.text,
-                    action: p.action,
-                    params: p.params,
-                    tier: p.tier,
-                };
-                self.finish(request, result, "confirmed")
+                self.finish(p.meta, result, "confirmed")
             }
-            PendingKind::Clarify { params } => self.run(&p.request_id, &p.action, params, p.source, p.text),
+            PendingKind::Clarify { action, params } => {
+                self.run(&p.meta.request_id, &action, params, p.meta.source, p.meta.text)
+            }
         }
     }
 
     // ---------- Kern ----------
 
     fn run(&self, id: &str, action: &str, params: Value, source: Source, text: Option<String>) -> ServerMessage {
+        let mut meta = Meta { request_id: id.into(), source, text, action: action.into(), params, tier: 1 };
         let Some(spec) = catalog::get(action) else {
-            self.log_entry(
-                &source,
-                text.as_deref(),
-                Some(action),
-                Some(&params),
-                None,
-                "denied",
-                "nicht in der Whitelist",
-            );
+            self.log_meta(&meta, "denied", "nicht in der Whitelist", None, None);
             return self.reply_fail(id, t("not_understood", &[]), Mood::Confused);
         };
-        if source.is_remote() && !spec.remote {
-            self.log_entry(
-                &source,
-                text.as_deref(),
-                Some(action),
-                Some(&params),
-                Some(spec.tier as u8),
-                "denied",
-                "remote gesperrt",
-            );
+        meta.tier = spec.tier as u8;
+        if meta.source.is_remote() && !spec.remote {
+            self.log_meta(&meta, "denied", "remote gesperrt", None, None);
             return self.reply_fail(id, t("remote_forbidden", &[]), Mood::Error);
         }
         let Some(handler) = self.registry.iter().find(|a| a.id() == action) else {
             return self.reply_fail(id, t("unsupported", &[]), Mood::Error);
         };
 
-        let mut plan = self.prepare(handler.as_ref(), &params, &source);
+        let mut plan = self.prepare(handler.as_ref(), &meta.params, &meta.source);
         // Spiel nicht gefunden? Einmal die Steam-Bibliothek neu einlesen (neu installiert?).
         if action == "app.launch" && matches!(plan, Err(ActionError::NotFound(_))) {
             self.rescan_games();
-            plan = self.prepare(handler.as_ref(), &params, &source);
+            plan = self.prepare(handler.as_ref(), &meta.params, &meta.source);
         }
 
         match plan {
-            Err(e) => {
-                let meta = PendingMeta {
-                    request_id: id.into(),
-                    source,
-                    text,
-                    action: action.into(),
-                    params,
-                    tier: spec.tier as u8,
-                };
-                self.finish(meta, Err(e), "failed")
-            }
-            Ok(Plan::Clarify { question, params: new_params }) => {
+            Err(e) => self.finish(meta, Err(e), "failed"),
+            Ok(Plan::Clarify { question, params: new_params, action: next, choices }) => {
                 let confirm_id = self.next_id();
-                self.log_entry(&source, text.as_deref(), Some(action), Some(&params), Some(1), "pending", &question);
+                meta.tier = 1;
+                self.log_meta(&meta, "pending", &question, None, None);
+                let next = next.map(str::to_string).unwrap_or_else(|| action.to_string());
                 *self.pending.lock().unwrap() = Some(Pending {
                     confirm_id: confirm_id.clone(),
-                    request_id: id.into(),
-                    source,
-                    text,
-                    action: action.into(),
-                    params,
-                    tier: 1,
+                    meta,
                     pc_only: false,
                     created: Instant::now(),
-                    kind: PendingKind::Clarify { params: new_params },
+                    kind: PendingKind::Clarify { action: next, params: new_params },
                 });
-                self.confirm_request(id, confirm_id, question, 1, false)
+                self.confirm_request(id, confirm_id, question, 1, false).with_choices(choices)
             }
             Ok(Plan::Ready { tier, what, job }) => {
                 let tier = tier.max(spec.tier);
-                if tier == Tier::PcOnly && source.is_remote() {
-                    self.log_entry(
-                        &source,
-                        text.as_deref(),
-                        Some(action),
-                        Some(&params),
-                        Some(3),
-                        "denied",
-                        "Stufe 3 remote gesperrt",
-                    );
+                meta.tier = tier as u8;
+                if tier == Tier::PcOnly && meta.source.is_remote() {
+                    self.log_meta(&meta, "denied", "Stufe 3 remote gesperrt", None, None);
                     return self.reply_fail(id, t("remote_forbidden", &[]), Mood::Error);
                 }
                 if tier == Tier::Instant {
                     let result = job(self.platform.as_ref());
-                    let meta =
-                        PendingMeta { request_id: id.into(), source, text, action: action.into(), params, tier: 1 };
                     return self.finish(meta, result, "done");
                 }
-                let pc_only = tier == Tier::PcOnly || source.is_indirect();
+                let pc_only = tier == Tier::PcOnly || meta.source.is_indirect();
                 let question = t(if pc_only { "confirm_ask_pc" } else { "confirm_ask" }, &[("what", &what)]);
                 let confirm_id = self.next_id();
-                self.log_entry(
-                    &source,
-                    text.as_deref(),
-                    Some(action),
-                    Some(&params),
-                    Some(tier as u8),
-                    "pending",
-                    &what,
-                );
+                self.log_meta(&meta, "pending", &what, None, None);
                 *self.pending.lock().unwrap() = Some(Pending {
                     confirm_id: confirm_id.clone(),
-                    request_id: id.into(),
-                    source,
-                    text,
-                    action: action.into(),
-                    params,
-                    tier: tier as u8,
+                    meta,
                     pc_only,
                     created: Instant::now(),
                     kind: PendingKind::Run { job },
@@ -404,24 +381,26 @@ impl Engine {
 
     fn prepare(&self, handler: &dyn Action, params: &Value, source: &Source) -> Result<Plan, ActionError> {
         let games = self.games();
+        let places = self.places();
         let config = self.config.read().unwrap();
-        let ctx = Ctx { platform: self.platform.as_ref(), config: &config, games: &games, source };
+        let ctx = Ctx {
+            platform: self.platform.as_ref(),
+            config: &config,
+            games: &games,
+            source,
+            places: &places,
+            log: &self.log,
+            now: crate::time::unix_now(),
+        };
         handler.prepare(params, &ctx)
     }
 
-    fn finish(&self, m: PendingMeta, result: Result<actions::Done, ActionError>, ok_outcome: &str) -> ServerMessage {
+    fn finish(&self, m: Meta, result: Result<Done, ActionError>, ok_outcome: &str) -> ServerMessage {
         match result {
             Ok(done) => {
-                self.log_entry(
-                    &m.source,
-                    m.text.as_deref(),
-                    Some(&m.action),
-                    Some(&m.params),
-                    Some(m.tier),
-                    ok_outcome,
-                    &done.text,
-                );
-                ServerMessage::reply(&m.request_id, true, done.text, done.mood, Some(&m.action))
+                self.log_meta(&m, ok_outcome, &done.text, done.undo.clone(), done.undo_of.clone());
+                ServerMessage::reply(&m.request_id, true, short(&done.text), done.mood, Some(&m.action))
+                    .with_choices(done.choices)
             }
             Err(e) => {
                 let (text, mood) = match &e {
@@ -431,15 +410,7 @@ impl Engine {
                         (t("error", &[("reason", r)]), Mood::Error)
                     }
                 };
-                self.log_entry(
-                    &m.source,
-                    m.text.as_deref(),
-                    Some(&m.action),
-                    Some(&m.params),
-                    Some(m.tier),
-                    "failed",
-                    &e.to_string(),
-                );
+                self.log_meta(&m, "failed", &e.to_string(), None, None);
                 ServerMessage::reply(&m.request_id, false, text, mood, Some(&m.action))
             }
         }
@@ -453,51 +424,127 @@ impl Engine {
 
     fn confirm_request(&self, id: &str, confirm_id: String, text: String, tier: u8, pc_only: bool) -> ServerMessage {
         let secs = self.config.read().unwrap().confirm_timeout_secs;
-        ServerMessage::ConfirmRequest { id: id.into(), confirm_id, text, tier, expires_in_ms: secs * 1000, pc_only }
+        ServerMessage::ConfirmRequest {
+            id: id.into(),
+            confirm_id,
+            text: short(&text),
+            tier,
+            expires_in_ms: secs * 1000,
+            pc_only,
+            choices: Vec::<Choice>::new(),
+        }
     }
 
     fn reply_fail(&self, id: &str, text: String, mood: Mood) -> ServerMessage {
         ServerMessage::reply(id, false, text, mood, None)
     }
 
-    fn log_pending(&self, p: &Pending, outcome: &str, msg: &str) {
-        self.log_entry(&p.source, p.text.as_deref(), Some(&p.action), Some(&p.params), Some(p.tier), outcome, msg);
+    /// Hintergrund-Ereignis protokollieren (Backup, Papierkorb geleert …).
+    pub fn log_system(&self, outcome: &str, msg: &str) {
+        self.log.write(Entry {
+            ts: ActionLog::now(),
+            source: "panco".into(),
+            outcome: outcome.into(),
+            message: msg.into(),
+            ..Default::default()
+        });
     }
 
-    fn log_simple(&self, source: &Source, text: Option<&str>, outcome: &str, msg: &str) {
-        self.log_entry(source, text, None, None, None, outcome, msg);
+    /// Wartung: abgelaufene Papierkorb-Einträge entfernen, fälliges Backup anlegen.
+    /// Gibt eine kurze Zusammenfassung zurück (für Protokoll/Diagnose).
+    pub fn maintenance(&self, force_backup: bool) -> Vec<String> {
+        let places = self.places();
+        let files = self.config.read().unwrap().files.clone();
+        let now = crate::time::unix_now();
+        let mut report = Vec::new();
+        let purged = self.trash().purge_older_than(places.trash_days, now);
+        if purged > 0 {
+            let msg = format!("{purged} Einträge nach {} Tagen aus dem Papierkorb entfernt", places.trash_days);
+            self.log_system("trash_purged", &msg);
+            report.push(msg);
+        }
+        if files.backup_enabled && (force_backup || crate::backup::due(&places.backup, now)) {
+            match crate::backup::run(&places, now, self.platform.utc_offset_secs(), files.backup_keep) {
+                Ok(b) => {
+                    let msg = format!("Backup {} angelegt", b.name);
+                    self.log_system("backup", &msg);
+                    report.push(msg);
+                }
+                Err(e) => {
+                    let msg = format!("Backup fehlgeschlagen: {e}");
+                    self.log_system("backup_failed", &msg);
+                    report.push(msg);
+                }
+            }
+        }
+        report
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn log_entry(
-        &self,
-        source: &Source,
-        text: Option<&str>,
-        action: Option<&str>,
-        params: Option<&Value>,
-        tier: Option<u8>,
-        outcome: &str,
-        msg: &str,
-    ) {
+    fn log_plain(&self, source: &Source, text: Option<&str>, outcome: &str, msg: &str) {
         self.log.write(Entry {
             ts: ActionLog::now(),
             source: source.label(),
             text: text.map(str::to_string),
-            action: action.map(str::to_string),
-            params: params.cloned(),
-            tier,
             outcome: outcome.into(),
             message: msg.into(),
+            ..Default::default()
+        });
+    }
+
+    fn log_meta(&self, m: &Meta, outcome: &str, msg: &str, undo: Option<UndoOp>, undo_of: Option<String>) {
+        let spec = catalog::get(&m.action);
+        let redact = spec.is_some_and(|s| s.redact);
+        let (text, params, message) = if redact {
+            (m.text.as_ref().map(|_| "[ausgeblendet]".to_string()), Some(redact_params(spec.unwrap(), &m.params)), {
+                if outcome == "done" || outcome == "confirmed" {
+                    "[ausgeblendet]".to_string()
+                } else {
+                    msg.to_string()
+                }
+            })
+        } else {
+            (m.text.clone(), Some(m.params.clone()), msg.to_string())
+        };
+        self.log.write(Entry {
+            ts: ActionLog::now(),
+            source: m.source.label(),
+            text,
+            action: spec.map(|s| s.id.clone()).or_else(|| Some(m.action.clone())),
+            params,
+            tier: Some(m.tier),
+            outcome: outcome.into(),
+            message,
+            undo,
+            undo_of,
+            ..Default::default()
         });
     }
 }
 
-/// Was nach dem Ausführen für Antwort und Protokoll gebraucht wird.
-struct PendingMeta {
-    request_id: String,
-    source: Source,
-    text: Option<String>,
-    action: String,
-    params: Value,
-    tier: u8,
+/// Antworten sind höchstens 300 Zeichen lang (Protokoll-Schema, Sprechblase).
+fn short(text: &str) -> String {
+    if text.chars().count() <= 300 {
+        text.to_string()
+    } else {
+        text.chars().take(298).collect::<String>() + " …"
+    }
+}
+
+/// Text-Parameter durch ihre Länge ersetzen; Titel bleiben lesbar (zum Wiederfinden).
+fn redact_params(_spec: &ActionSpec, params: &Value) -> Value {
+    match params {
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(k, v)| {
+                    let v = match (k.as_str(), v) {
+                        ("title" | "query", _) => v.clone(),
+                        (_, Value::String(s)) => Value::String(format!("[{} Zeichen]", s.chars().count())),
+                        _ => v.clone(),
+                    };
+                    (k.clone(), v)
+                })
+                .collect(),
+        ),
+        other => other.clone(),
+    }
 }

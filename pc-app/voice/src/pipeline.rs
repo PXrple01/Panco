@@ -20,6 +20,9 @@ use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+/// Whisper-Hinweis für Antworten auf Rückfragen.
+const ANSWER_PROMPT: &str = "Ja. Nein. Ja, bitte. Nein, lass das. Okay.";
+
 /// Woher das Audio kommt.
 pub enum Source {
     /// Echtes Mikrofon (cpal).
@@ -411,9 +414,15 @@ impl Pipeline {
             self.emit(Event::NoSpeech);
         } else {
             self.state = State::Transcribing;
+            // Antwort auf eine Rückfrage: kurzer Ja/Nein-Hinweis – mit dem langen Befehls-Hinweis
+            // wird ein kurzes "Ja" gern zu "Jan." (gemessen mit stt_eval).
+            let prompt = match rec.purpose {
+                Purpose::Answer => ANSWER_PROMPT.to_string(),
+                Purpose::Command => self.cfg.prompt.clone(),
+            };
             let _ = self.stt_tx.send(SttJob::Whisper {
                 pcm: rec.buf,
-                prompt: self.cfg.prompt.clone(),
+                prompt,
                 purpose: rec.purpose,
                 model: self.cfg.model_path.clone(),
             });

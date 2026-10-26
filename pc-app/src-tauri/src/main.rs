@@ -5,10 +5,13 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod data;
 mod hotkeys;
 mod ipc;
+mod maintenance;
 mod overlay;
 mod settings;
+mod setup;
 mod tray;
 mod voice;
 
@@ -68,23 +71,46 @@ fn main() {
         // Zweiter Start öffnet nur das Overlay der laufenden Instanz.
         .plugin(tauri_plugin_single_instance::init(|app, _, _| overlay::show(app, true)))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .manage(Panco { engine })
         .manage(settings::CpuSampler::default())
         .invoke_handler(tauri::generate_handler![
             ipc::send,
             ipc::hide_overlay,
             ipc::ui_settings,
+            ipc::overlay_height,
             settings::status,
             settings::set_voice,
             settings::set_muted,
             settings::download_model,
             settings::train_start,
             settings::train_cancel,
+            setup::setup_state,
+            setup::setup_save,
+            setup::setup_finish,
+            data::files_settings,
+            data::files_save,
+            data::backup_now,
+            data::backups,
+            data::open_place,
+            data::notes_list,
+            data::note_get,
+            data::note_put,
+            data::note_new,
+            data::log_entries,
+            data::undo,
+            data::trash_entries,
+            data::trash_restore,
         ])
         .setup(|app| {
             voice::start(app.handle());
             tray::create(app.handle())?;
             hotkeys::register_all(app.handle());
+            maintenance::start(app.handle());
+            // Erster Start: Ordner für Papierkorb, Backup und Notizen wählen lassen.
+            if !crate::engine(app.handle()).config().setup.done {
+                setup::open(app.handle());
+            }
             Ok(())
         })
         .build(tauri::generate_context!())

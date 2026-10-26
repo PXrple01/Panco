@@ -72,4 +72,21 @@ impl Platform for MockPlatform {
     fn process_stats(&self) -> PResult<ProcStats> {
         Ok(ProcStats::default())
     }
+    fn reveal(&self, path: &std::path::Path) -> PResult<()> {
+        self.record(format!("reveal {}", path.display()));
+        Ok(())
+    }
+    /// Test-"Verschlüsselung": umkehrbar, aber nicht lesbar (reicht für Tests).
+    fn protect(&self, data: &[u8]) -> PResult<Vec<u8>> {
+        let mut out = b"MOCK".to_vec();
+        out.extend(data.iter().map(|b| b ^ 0x5A));
+        Ok(out)
+    }
+    fn unprotect(&self, data: &[u8]) -> PResult<Vec<u8>> {
+        let body = data.strip_prefix(b"MOCK").ok_or_else(|| PlatformError::Failed("kein Mock-Blob".into()))?;
+        Ok(body.iter().map(|b| b ^ 0x5A).collect())
+    }
+    fn utc_offset_secs(&self) -> i32 {
+        3600
+    }
 }

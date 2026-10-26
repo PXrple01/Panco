@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::texts::t;
+use crate::undo::UndoOp;
 use serde::Deserialize;
 
 pub struct VolumeSet;
@@ -38,8 +39,13 @@ impl Action for VolumeSet {
         }
         let level = p.level as u8;
         Ok(Plan::instant(format!("Lautstärke auf {level}"), move |pf| {
+            let before = pf.volume().ok();
             pf.set_volume(level)?;
-            Ok(Done { text: t("volume_set", &[("level", &level.to_string())]), mood: Mood::Info })
+            let done = Done::new(t("volume_set", &[("level", &level.to_string())]), Mood::Info);
+            Ok(match before {
+                Some(b) if b != level => done.undo(UndoOp::Volume { level: b }),
+                _ => done,
+            })
         }))
     }
 }
@@ -55,9 +61,11 @@ impl Action for VolumeChange {
         }
         let delta = p.delta;
         Ok(Plan::instant(if delta > 0 { "lauter" } else { "leiser" }, move |pf| {
-            let level = (pf.volume()? as i64 + delta).clamp(0, 100) as u8;
+            let before = pf.volume()?;
+            let level = (before as i64 + delta).clamp(0, 100) as u8;
             pf.set_volume(level)?;
-            Ok(Done { text: t("volume_set", &[("level", &level.to_string())]), mood: Mood::Info })
+            Ok(Done::new(t("volume_set", &[("level", &level.to_string())]), Mood::Info)
+                .undo(UndoOp::Volume { level: before }))
         }))
     }
 }
@@ -74,7 +82,8 @@ impl Action for VolumeMute {
                 None => !pf.muted()?,
             };
             pf.set_muted(mute)?;
-            Ok(Done { text: t(if mute { "volume_mute" } else { "volume_unmute" }, &[]), mood: Mood::Info })
+            Ok(Done::new(t(if mute { "volume_mute" } else { "volume_unmute" }, &[]), Mood::Info)
+                .undo(UndoOp::Mute { muted: !mute }))
         }))
     }
 }

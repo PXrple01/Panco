@@ -12,6 +12,17 @@ pub enum ClientMessage {
     Confirm { confirm_id: String, accept: bool },
 }
 
+/// Auswahlmöglichkeit unter einer Antwort (z. B. Suchtreffer): ein Klick ruft die Aktion auf.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Choice {
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    pub action: String,
+    pub params: Value,
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Mood {
@@ -51,6 +62,8 @@ pub enum ServerMessage {
         mood: Mood,
         #[serde(skip_serializing_if = "Option::is_none")]
         action: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        choices: Vec<Choice>,
     },
     ConfirmRequest {
         id: String,
@@ -59,6 +72,8 @@ pub enum ServerMessage {
         tier: u8,
         expires_in_ms: u64,
         pc_only: bool,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        choices: Vec<Choice>,
     },
     State {
         avatar: AvatarState,
@@ -71,7 +86,30 @@ pub enum ServerMessage {
 
 impl ServerMessage {
     pub fn reply(id: &str, ok: bool, text: impl Into<String>, mood: Mood, action: Option<&str>) -> Self {
-        ServerMessage::Reply { id: id.to_string(), ok, text: text.into(), mood, action: action.map(str::to_string) }
+        ServerMessage::Reply {
+            id: id.to_string(),
+            ok,
+            text: text.into(),
+            mood,
+            action: action.map(str::to_string),
+            choices: Vec::new(),
+        }
+    }
+
+    /// Hängt Auswahlmöglichkeiten an eine Antwort oder Rückfrage.
+    pub fn with_choices(mut self, new: Vec<Choice>) -> Self {
+        match &mut self {
+            ServerMessage::Reply { choices, .. } | ServerMessage::ConfirmRequest { choices, .. } => *choices = new,
+            ServerMessage::State { .. } => {}
+        }
+        self
+    }
+
+    pub fn choices(&self) -> &[Choice] {
+        match self {
+            ServerMessage::Reply { choices, .. } | ServerMessage::ConfirmRequest { choices, .. } => choices,
+            ServerMessage::State { .. } => &[],
+        }
     }
 
     /// Text, den Panco sagen/anzeigen soll (für TTS und Tests).

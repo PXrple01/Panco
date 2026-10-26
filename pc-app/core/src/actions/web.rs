@@ -56,7 +56,7 @@ impl Action for WebSearch {
         let url = validate_https(&ctx.config.search_url.replace("{q}", &url_encode(&query)))?;
         Ok(Plan::instant(format!("nach {query} suchen"), move |pf| {
             pf.open(&url, &[])?;
-            Ok(Done { text: t("web_search", &[("query", &query)]), mood: Mood::Info })
+            Ok(Done::new(t("web_search", &[("query", &query)]), Mood::Info))
         }))
     }
 }

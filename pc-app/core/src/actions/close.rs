@@ -70,10 +70,10 @@ impl Action for AppClose {
                     Ok(Done::ok(t("close_app", &[("name", &name)])))
                 }))
             }
-            Resolved::Unsure(r) => Ok(Plan::Clarify {
-                question: t("did_you_mean", &[("name", &r.display)]),
-                params: serde_json::json!({ "target": exe_stem(&r.process) }),
-            }),
+            Resolved::Unsure(r) => Ok(Plan::clarify(
+                t("did_you_mean", &[("name", &r.display)]),
+                serde_json::json!({ "target": exe_stem(&r.process) }),
+            )),
             Resolved::None => Err(ActionError::NotFound(t("not_running", &[("name", &display_name(&query))]))),
         }
     }

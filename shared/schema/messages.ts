@@ -11,6 +11,14 @@ export type ClientMessage =
   | { type: "invoke"; id: string; action: string; params: Record<string, unknown> }
   | { type: "confirm"; confirm_id: string; accept: boolean };
 
+/** Auswahl unter einer Antwort (z. B. Suchtreffer); Klick → invoke(action, params). */
+export interface Choice {
+  label: string;
+  detail?: string;
+  action: string;
+  params: Record<string, unknown>;
+}
+
 export interface Reply {
   type: "reply";
   id: string;
@@ -18,6 +26,7 @@ export interface Reply {
   text: string;
   mood: Mood;
   action?: string | null;
+  choices?: Choice[];
 }
 
 export interface ConfirmRequest {
@@ -28,6 +37,7 @@ export interface ConfirmRequest {
   tier: 1 | 2 | 3; // 1 = Rückfrage "Meinst du …?"
   expires_in_ms: number;
   pc_only: boolean;
+  choices?: Choice[];
 }
 
 export interface State {

@@ -73,7 +73,7 @@ fn build_config(app: &AppHandle, muted: bool) -> VoiceConfig {
         wakeword_path: wakeword_path(),
         threshold: v.wake_threshold.clamp(0.2, 0.9),
         model_path: model::path(&models_dir(), &v.model),
-        keep_model_secs: v.keep_model_secs.clamp(5, 600),
+        keep_model_secs: v.keep_model_secs.clamp(5, 3600),
         prompt: whisper_prompt(&engine),
         phrases: command_phrases(&engine),
     }
@@ -83,6 +83,8 @@ fn build_config(app: &AppHandle, muted: bool) -> VoiceConfig {
 fn whisper_prompt(engine: &Engine) -> String {
     let mut names: Vec<String> = engine.games().into_iter().map(|g| g.name).collect();
     names.extend(engine.config().apps.iter().filter_map(|a| a.names.first().cloned()));
+    // Titel normaler Notizen (bleibt lokal); sensible Titel nie.
+    names.extend(panco_core::notes::list(&engine.places().notes).into_iter().filter(|n| !n.sensitive).map(|n| n.title));
     let mut list = String::new();
     for n in names {
         if list.len() + n.len() > 500 {
@@ -93,7 +95,8 @@ fn whisper_prompt(engine: &Engine) -> String {
     }
     format!(
         "Panco, öffne Deadlock. Starte Discord. Lautstärke auf 30 Prozent. Nächstes Lied. Such Build Guides. \
-         Fahr den PC herunter. Ja. Nein. {}",
+         Finde meine letzte Rechnung. Neue Notiz Einkauf: Milch. Lies die Notiz vor. Lösche die Datei. \
+         Mach das rückgängig. Fahr den PC herunter. Ja. Nein. {}",
         list.trim_end_matches(", ")
     )
 }
@@ -126,10 +129,17 @@ fn command_phrases(engine: &Engine) -> Vec<String> {
         "fahr den pc herunter",
         "starte den pc neu",
         "ruhemodus",
+        "finde meine letzte rechnung",
+        "welche notizen habe ich",
+        "mach das rückgängig",
+        "rückgängig",
         "ja",
         "nein",
     ];
     p.extend(fixed.iter().map(|s| s.to_string()));
+    for n in panco_core::notes::list(&engine.places().notes).into_iter().filter(|n| !n.sensitive).take(30) {
+        p.push(format!("lies die notiz {} vor", n.title.to_lowercase()));
+    }
     p
 }
 
@@ -185,7 +195,7 @@ fn on_event(app: &AppHandle, event: Event) {
         Event::NoSpeech => set_state(app, Some(AvatarState::Idle), None, None),
         Event::Transcript { purpose, transcript } => {
             set_state(app, Some(AvatarState::Thinking), None, None);
-            let _ = app.emit_to(overlay::LABEL, "panco://heard", &transcript.text);
+            overlay::heard(app, &transcript.text);
             let app = app.clone();
             std::thread::spawn(move || handle_transcript(&app, purpose, &transcript.text));
         }

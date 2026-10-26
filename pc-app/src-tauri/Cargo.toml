@@ -14,5 +14,6 @@ panco-voice = { path = "../voice" }
 tauri = { version = "2.12.5", features = ["tray-icon", "image-png"] }
 tauri-plugin-global-shortcut = "2.4.1"
 tauri-plugin-single-instance = "2.5.4"
+tauri-plugin-dialog = "2.8.3"
 serde.workspace = true
 serde_json.workspace = true

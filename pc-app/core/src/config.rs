@@ -11,6 +11,8 @@ pub struct Config {
     pub hotkeys: Hotkeys,
     pub overlay: OverlayConfig,
     pub voice: VoiceSettings,
+    pub files: FileSettings,
+    pub setup: SetupSettings,
     /// Programme, Webseiten und URIs, die Panco per Name öffnen darf.
     pub apps: Vec<AppAlias>,
     /// Kurznamen für Spiele, z. B. "cs" → "Counter-Strike 2".
@@ -84,6 +86,58 @@ impl Default for VoiceSettings {
     }
 }
 
+/// Ordner, Papierkorb, Notizen, Backup. Pfade dürfen `%VAR%` enthalten.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct FileSettings {
+    /// Hier arbeitet Panco ohne Nachfrage (lesen, öffnen, anlegen).
+    pub allowed_folders: Vec<String>,
+    pub notes_dir: String,
+    /// Panco-Papierkorb: "Gelöschtes" landet hier und wird erst nach `trash_days` entfernt.
+    pub trash_dir: String,
+    pub trash_days: u32,
+    pub backup_enabled: bool,
+    pub backup_dir: String,
+    /// So viele Backups (Tage) bleiben erhalten.
+    pub backup_keep: u32,
+}
+
+/// Ersteinrichtung (wird beim ersten Start abgefragt).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct SetupSettings {
+    pub done: bool,
+    /// Wohnort fürs Wetter (Etappe 8), optional.
+    pub city: String,
+}
+
+fn dir_or_home(d: Option<PathBuf>, fallback: &str) -> PathBuf {
+    d.unwrap_or_else(|| dirs::home_dir().unwrap_or_else(std::env::temp_dir).join(fallback))
+}
+
+impl Default for FileSettings {
+    fn default() -> Self {
+        let documents = dir_or_home(dirs::document_dir(), "Documents");
+        let home = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
+        let notes = documents.join("Panco-Notizen");
+        let s = |p: PathBuf| p.to_string_lossy().to_string();
+        Self {
+            allowed_folders: vec![
+                s(documents.clone()),
+                s(dir_or_home(dirs::download_dir(), "Downloads")),
+                s(dir_or_home(dirs::desktop_dir(), "Desktop")),
+                s(notes.clone()),
+            ],
+            notes_dir: s(notes),
+            trash_dir: s(home.join("Panco").join("Papierkorb")),
+            trash_days: 30,
+            backup_enabled: true,
+            backup_dir: s(documents.join("Panco-Backups")),
+            backup_keep: 7,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OverlayConfig {
@@ -140,6 +194,8 @@ impl Default for Config {
             hotkeys: Hotkeys::default(),
             overlay: OverlayConfig::default(),
             voice: VoiceSettings::default(),
+            files: FileSettings::default(),
+            setup: SetupSettings::default(),
             apps: vec![
                 app(&["discord"], "discord://", &[], Some("Discord.exe")),
                 app(&["spotify"], "spotify:", &[], Some("Spotify.exe")),

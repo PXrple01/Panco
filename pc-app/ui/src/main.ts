@@ -5,7 +5,7 @@ import "./overlay.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { PancoAvatar } from "../../../shared/avatar/panco";
-import type { AvatarState, ClientMessage, ConfirmRequest, ServerMessage, State } from "../../../shared/schema/messages";
+import type { AvatarState, Choice, ClientMessage, ConfirmRequest, ServerMessage, State } from "../../../shared/schema/messages";
 
 interface UiSettings {
   reduce_motion: boolean;
@@ -13,6 +13,9 @@ interface UiSettings {
   auto_hide_ms: number;
   enabled: boolean;
   state: State;
+  /** Antwort und erkannter Text, die eintrafen, während das Overlay noch lud. */
+  pending: ServerMessage | null;
+  heard: string | null;
 }
 
 const MIC_LABEL: Record<string, string> = {
@@ -30,12 +33,13 @@ const input = $<HTMLInputElement>("input");
 const confirmRow = $<HTMLDivElement>("confirm");
 const confirmHint = $<HTMLSpanElement>("confirm-hint");
 const heard = $<HTMLParagraphElement>("heard");
+const choicesBox = $<HTMLDivElement>("choices");
 const mic = $<HTMLSpanElement>("mic");
 
 const REST_AFTER_MS = 10_000;
 let avatar: PancoAvatar | null = null;
 let restTimer = 0;
-let settings: Omit<UiSettings, "state"> = { reduce_motion: false, show_avatar: true, auto_hide_ms: 1600, enabled: true };
+let settings: Pick<UiSettings, "reduce_motion" | "show_avatar" | "auto_hide_ms" | "enabled"> = { reduce_motion: false, show_avatar: true, auto_hide_ms: 1600, enabled: true };
 let lastAvatar: AvatarState = "idle";
 let pendingConfirm: ConfirmRequest | null = null;
 let hideTimer = 0;
@@ -75,8 +79,43 @@ function react(mood: string) {
   if (!settings.show_avatar) avatarHost.classList.add("is-off");
 }
 
+/** Auswahlknöpfe (z. B. Suchtreffer). Ein Klick ruft die Aktion direkt auf. */
+function showChoices(choices: Choice[] | undefined) {
+  choicesBox.replaceChildren();
+  choicesBox.hidden = !choices?.length;
+  for (const c of choices ?? []) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "choice";
+    const label = document.createElement("span");
+    label.className = "choice__label";
+    label.textContent = c.label;
+    const detail = document.createElement("span");
+    detail.className = "choice__detail";
+    detail.textContent = c.detail ?? "";
+    btn.append(label, detail);
+    btn.addEventListener("click", () => {
+      send({ type: "invoke", id: `o${++counter}`, action: c.action, params: c.params });
+    });
+    choicesBox.append(btn);
+  }
+  fitHeight();
+}
+
+/** Fensterhöhe an den Inhalt anpassen. */
+function fitHeight() {
+  requestAnimationFrame(() => {
+    const card = $<HTMLDivElement>("card");
+    invoke("overlay_height", { height: Math.ceil(card.scrollHeight) }).catch(() => {});
+  });
+}
+
 function handle(msg: ServerMessage) {
-  window.clearTimeout(hideTimer);
+  // Zustandsmeldungen ("idle" nach der Antwort) dürfen das Ausblenden nicht abbrechen –
+  // nur eine neue Interaktion (Wake-Word, Aufnahme, Antwort) tut das.
+  if (msg.type !== "state" || msg.mic === "recording" || ["alert", "listening", "thinking"].includes(msg.avatar)) {
+    window.clearTimeout(hideTimer);
+  }
   wake();
   switch (msg.type) {
     case "reply":
@@ -84,9 +123,11 @@ function handle(msg: ServerMessage) {
       confirmRow.hidden = true;
       say(msg.text, !msg.ok && msg.mood === "error");
       react(msg.mood);
+      showChoices(msg.choices);
       // Erfolg: kurz zeigen, dann weg. Fehler: länger zeigen – aber ein per Sprache (ohne Fokus)
       // geöffnetes Overlay verschwindet immer von selbst, es soll kein Spiel verdecken.
-      if (settings.auto_hide_ms > 0 && (msg.ok || !document.hasFocus())) {
+      // Mit Auswahl bleibt das Overlay offen, bis man gewählt hat.
+      if (settings.auto_hide_ms > 0 && !msg.choices?.length && (msg.ok || !document.hasFocus())) {
         hideTimer = window.setTimeout(hide, msg.ok ? settings.auto_hide_ms : settings.auto_hide_ms * 2.5);
       }
       break;
@@ -95,6 +136,7 @@ function handle(msg: ServerMessage) {
       say(msg.text);
       confirmRow.hidden = false;
       confirmHint.textContent = msg.pc_only ? "nur per Klick" : "oder „ja“ tippen";
+      showChoices(msg.choices);
       $<HTMLButtonElement>("yes").focus();
       break;
     case "state":
@@ -156,15 +198,21 @@ function wake() {
 }
 for (const ev of ["keydown", "pointermove", "pointerdown"]) window.addEventListener(ev, wake, { passive: true });
 
-// Nachrichten, die nicht aus einer Eingabe hier stammen (Sprache, iPhone, Not-Aus).
-listen<ServerMessage>("panco://message", (e) => handle(e.payload));
-// Was die Spracherkennung verstanden hat – zur Kontrolle klein über der Sprechblase.
-listen<string>("panco://heard", (e) => {
+/** Was die Spracherkennung verstanden hat – zur Kontrolle klein über der Sprechblase. */
+function showHeard(text: string) {
   heard.hidden = false;
-  heard.textContent = `„${e.payload}“`;
-});
+  heard.textContent = `„${text}“`;
+}
+
+// Nachrichten, die nicht aus einer Eingabe hier stammen (Sprache, iPhone, Not-Aus).
+const listening = Promise.all([
+  listen<ServerMessage>("panco://message", (e) => handle(e.payload)),
+  listen<string>("panco://heard", (e) => showHeard(e.payload)),
+]);
 
 (async () => {
+  // Erst zuhören, dann Einstellungen holen: ab diesem Aufruf sendet Panco direkt (nichts geht verloren).
+  await listening;
   const ui = await invoke<UiSettings>("ui_settings");
   settings = ui;
   document.documentElement.classList.toggle("reduce-motion", settings.reduce_motion);
@@ -172,5 +220,7 @@ listen<string>("panco://heard", (e) => {
   else avatarHost.classList.add("is-off");
   wake();
   showState(ui.state);
+  if (ui.heard) showHeard(ui.heard);
+  if (ui.pending) handle(ui.pending);
   input.focus();
 })();

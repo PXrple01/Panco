@@ -62,7 +62,10 @@ def main():
     exe = os.path.abspath(sys.argv[1])
     secs = int(os.environ.get("SECS", "20"))
     home = tempfile.mkdtemp(prefix="panco-home-")
+    # GDK_GL=disable: GTK lädt unter X11 sonst beim Start den Software-OpenGL-Treiber (llvmpipe, ~11 MB) –
+    # ein reines Linux-Artefakt (Windows hat kein GTK) und würde die Vergleichswerte verfälschen.
     env = dict(os.environ, HOME=home, XDG_CONFIG_HOME=f"{home}/.config", DISPLAY=":99", NO_AT_BRIDGE="1")
+    env.setdefault("GDK_GL", "disable")
     xvfb = subprocess.Popen(["Xvfb", ":99", "-screen", "0", "1920x1080x24"], stderr=subprocess.DEVNULL)
     time.sleep(1)
     dbus = subprocess.run(
@@ -74,7 +77,7 @@ def main():
     with open(f"{home}/.config/Panco/config.json", "w") as f:
         reduced = "true" if os.environ.get("REDUCED") == "1" else "false"
         mode = os.environ.get("MODE", "push_to_talk")
-        f.write(f'{{"overlay": {{"reduce_motion": {reduced}}}, "voice": {{"mode": "{mode}"}}}}')
+        f.write(f'{{"overlay": {{"reduce_motion": {reduced}}}, "voice": {{"mode": "{mode}"}}, "setup": {{"done": true}}}}')
     app = subprocess.Popen([exe], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:
         time.sleep(4)
