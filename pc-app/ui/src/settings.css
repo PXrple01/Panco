@@ -117,6 +117,14 @@ input[type="range"] {
   width: 18px;
   height: 18px;
 }
+.select {
+  background: var(--pc-bg-0);
+  color: var(--pc-text);
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-s);
+  padding: 6px 8px;
+  font: inherit;
+}
 .num {
   width: 80px;
   background: var(--pc-bg-0);

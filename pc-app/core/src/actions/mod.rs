@@ -21,6 +21,7 @@ use serde_json::Value;
 mod close;
 mod files;
 mod focus;
+mod info;
 mod launch;
 mod media;
 mod notes;
@@ -192,5 +193,7 @@ pub fn registry() -> Vec<Box<dyn Action>> {
         Box::new(notes::NoteAppend),
         Box::new(notes::NoteRead),
         Box::new(notes::NoteSearch),
+        Box::new(info::InfoTime),
+        Box::new(info::Help),
     ]
 }

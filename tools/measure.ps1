@@ -14,7 +14,7 @@
   alle Kindprozesse (msedgewebview2.exe). CPU = Prozent EINES Kerns im Mittel über die Phase.
 
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File tools\measure.ps1 -Seconds 30
+  powershell -NoProfile -ExecutionPolicy Bypass -File tools\measure.ps1 -Seconds 30
 #>
 param(
   [int]$Seconds = 20,
@@ -27,7 +27,7 @@ $ErrorActionPreference = 'Stop'
 
 function Get-PancoTree {
   $root = Get-Process -Name panco -ErrorAction SilentlyContinue | Select-Object -First 1
-  if (-not $root) { throw "Panco läuft nicht. Bitte zuerst starten." }
+  if (-not $root) { throw "Panco läuft nicht (mehr). Falls es eben noch lief: abgestürzt? Bitte %APPDATA%\Panco\logs\absturz.log mitschicken." }
   $all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name
   $ids = New-Object System.Collections.Generic.List[int]
   $ids.Add($root.Id)
@@ -81,6 +81,17 @@ function Press-Hotkey([string]$Hint) {
 }
 
 Write-Host "Panco-Messung: $Seconds s pro Phase`n"
+# Im Leerlauf darf kein Panco-Fenster offen sein (Einstellungen, Overlay) – sonst zählt WebView2 mit.
+$tries = 0
+while ((Get-Sample).Names -match 'msedgewebview2') {
+  if (++$tries -gt 2) {
+    Write-Host "WebView2 läuft weiter, obwohl kein Fenster offen ist – bitte so an Claude melden. Messe trotzdem." -ForegroundColor Yellow
+    break
+  }
+  Write-Host "Ein Panco-Fenster ist noch offen (z. B. Einstellungen oder Overlay). Bitte schließen." -ForegroundColor Yellow
+  Read-Host "Dann Enter drücken" | Out-Null
+  Start-Sleep -Seconds 3
+}
 $results = @()
 $results += Measure-Phase 'Leerlauf (kein Fenster)'
 Press-Hotkey 'Overlay öffnen (Strg+Leertaste)'

@@ -6,7 +6,7 @@
 </head>
 <body>
   <div id="card" class="card">
-    <div id="avatar" class="avatar"></div>
+    <div id="avatar" class="avatar" title="Ziehen zum Verschieben"></div>
     <div class="main">
       <p id="heard" class="heard" hidden></p>
       <p id="bubble" class="bubble" hidden></p>
@@ -22,6 +22,9 @@
         <kbd>Esc</kbd>
       </form>
     </div>
+    <button id="close" class="close" type="button" title="Schließen (Esc)" aria-label="Schließen">
+      <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" /></svg>
+    </button>
   </div>
   <script type="module" src="./src/main.ts"></script>
 </body>

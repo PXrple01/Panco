@@ -70,6 +70,14 @@ pub struct VoiceSettings {
     pub speak_replies: bool,
     /// Overlay bei Sprachbefehlen einblenden (ohne Fokus zu stehlen)
     pub show_overlay: bool,
+    /// Windows-Stimme (Anzeigename, z. B. "Microsoft Katja"); leer = automatisch eine deutsche Frauenstimme
+    pub tts_voice: String,
+    /// Tonhöhe 0.5 … 2.0 (1.0 = normal). Panco klingt etwas höher, passend zum Avatar.
+    pub tts_pitch: f32,
+    /// Sprechtempo 0.5 … 2.0 (1.0 = normal)
+    pub tts_rate: f32,
+    /// Bei Rückfragen schon zuhören, während Panco noch spricht
+    pub barge_in: bool,
 }
 
 impl Default for VoiceSettings {
@@ -82,6 +90,10 @@ impl Default for VoiceSettings {
             wake_threshold: 0.5,
             speak_replies: true,
             show_overlay: true,
+            tts_voice: String::new(),
+            tts_pitch: 1.4,
+            tts_rate: 1.1,
+            barge_in: true,
         }
     }
 }
@@ -147,6 +159,29 @@ pub struct OverlayConfig {
     pub show_avatar: bool,
     /// Windows-Acrylic-Hintergrund (Glas-Effekt).
     pub acrylic: bool,
+    /// Bei "Panco, …" nur ein kleines Icon mit dem erkannten Text (statt der großen Karte).
+    pub compact: bool,
+    /// Bildschirm (Name, wie Windows ihn meldet); leer = Hauptbildschirm.
+    pub monitor: String,
+    pub anchor: OverlayAnchor,
+    /// Selbst verschobene Position: Anteil (0…1) der freien Fläche des Bildschirms, links/oben.
+    pub custom: Option<[f64; 2]>,
+    /// Größe 0.75 … 1.5
+    pub scale: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OverlayAnchor {
+    TopLeft,
+    TopCenter,
+    TopRight,
+    BottomLeft,
+    BottomCenter,
+    BottomRight,
+    Center,
+    /// Per Ziehen verschoben (siehe `custom`)
+    Custom,
 }
 
 /// Ein Programm/Ziel, das Panco öffnen darf. `open` ist ein Pfad (Umgebungsvariablen wie
@@ -175,7 +210,17 @@ impl Default for Hotkeys {
 
 impl Default for OverlayConfig {
     fn default() -> Self {
-        Self { auto_hide_ms: 1600, reduce_motion: false, show_avatar: true, acrylic: true }
+        Self {
+            auto_hide_ms: 1600,
+            reduce_motion: false,
+            show_avatar: true,
+            acrylic: true,
+            compact: true,
+            monitor: String::new(),
+            anchor: OverlayAnchor::TopRight,
+            custom: None,
+            scale: 1.0,
+        }
     }
 }
 

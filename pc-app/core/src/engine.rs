@@ -257,6 +257,11 @@ impl Engine {
         self.run(id, action, params, source, None)
     }
 
+    /// Wartet eine Rückfrage auf Antwort?
+    pub fn has_pending(&self) -> bool {
+        self.pending.lock().unwrap().is_some()
+    }
+
     /// Bestätigung/Ablehnung. `confirm_id = None` → die aktuell offene Frage (Sprachantwort).
     pub fn confirm(&self, confirm_id: Option<&str>, accept: bool, via: ConfirmVia) -> ServerMessage {
         let mut slot = self.pending.lock().unwrap();

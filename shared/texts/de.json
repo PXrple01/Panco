@@ -1,6 +1,10 @@
 {
   "$comment": "Alle gesprochenen/angezeigten Panco-Sätze. Ton: kurz, trocken, freundlich, höchstens 2 Sätze. {platzhalter} werden ersetzt.",
-  "not_understood": "Das habe ich nicht verstanden, Chef.",
+  "not_understood": "Das kann ich noch nicht. Frag mich „Was kannst du?“",
+  "time_now": "Es ist {time} Uhr.",
+  "date_now": "Heute ist {weekday}, der {day}. {month} {year}.",
+  "help": "Ich kann Spiele und Programme starten, Dateien finden und aufräumen, Notizen schreiben und vorlesen, Lautstärke und Musik steuern, Uhrzeit sagen und Schritte rückgängig machen. Freie Fragen lerne ich mit dem Claude-Modus.",
+  "help_screen": "Bildschirm und Fenster vorlesen lerne ich bald – mit dem Claude-Assistenten.",
   "did_you_mean": "Meinst du {name}?",
   "not_found": "{name} finde ich nicht.",
   "not_running": "{name} läuft gerade nicht.",

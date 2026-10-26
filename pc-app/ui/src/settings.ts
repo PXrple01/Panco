@@ -14,6 +14,28 @@ interface VoiceSettings {
   wake_threshold: number;
   speak_replies: boolean;
   show_overlay: boolean;
+  tts_voice: string;
+  tts_pitch: number;
+  tts_rate: number;
+  barge_in: boolean;
+}
+
+type Anchor = "top_left" | "top_center" | "top_right" | "bottom_left" | "bottom_center" | "bottom_right" | "center" | "custom";
+interface OverlayConfig {
+  auto_hide_ms: number;
+  reduce_motion: boolean;
+  show_avatar: boolean;
+  acrylic: boolean;
+  compact: boolean;
+  monitor: string;
+  anchor: Anchor;
+  custom: [number, number] | null;
+  scale: number;
+}
+interface Appearance {
+  overlay: OverlayConfig;
+  monitors: { name: string; label: string }[];
+  voices: { name: string; language: string; female: boolean }[];
 }
 
 interface Status {
@@ -164,6 +186,11 @@ function render(s: Status) {
     $<HTMLInputElement>("threshold").value = String(s.voice.wake_threshold);
     $("th-val").textContent = fmt(s.voice.wake_threshold, 2);
     $<HTMLInputElement>("speak").checked = s.voice.speak_replies;
+    $<HTMLInputElement>("barge").checked = s.voice.barge_in;
+    $<HTMLInputElement>("tts-pitch").value = String(s.voice.tts_pitch);
+    $("tts-pitch-val").textContent = `${Math.round(s.voice.tts_pitch * 100)} %`;
+    $<HTMLInputElement>("tts-rate").value = String(s.voice.tts_rate);
+    $("tts-rate-val").textContent = `${Math.round(s.voice.tts_rate * 100)} %`;
     $<HTMLInputElement>("overlay").checked = s.voice.show_overlay;
     $<HTMLInputElement>("keep").value = String(s.voice.keep_model_secs);
   }
@@ -202,6 +229,76 @@ $<HTMLInputElement>("threshold").addEventListener("input", (e) => {
 });
 $<HTMLInputElement>("threshold").addEventListener("change", (e) => save({ wake_threshold: Number((e.target as HTMLInputElement).value) }));
 $<HTMLInputElement>("speak").addEventListener("change", (e) => save({ speak_replies: (e.target as HTMLInputElement).checked }));
+$<HTMLInputElement>("barge").addEventListener("change", (e) => save({ barge_in: (e.target as HTMLInputElement).checked }));
+for (const [id, key] of [["tts-pitch", "tts_pitch"], ["tts-rate", "tts_rate"]] as const) {
+  const el = $<HTMLInputElement>(id);
+  el.addEventListener("input", () => ($(`${id}-val`).textContent = `${Math.round(Number(el.value) * 100)} %`));
+  el.addEventListener("change", () => save({ [key]: Number(el.value) }));
+}
+$<HTMLSelectElement>("tts-voice").addEventListener("change", (e) => save({ tts_voice: (e.target as HTMLSelectElement).value }));
+$("tts-preview").addEventListener("click", async () => {
+  await save({});
+  invoke("tts_preview");
+});
+
+// ---- Aussehen: Position, Bildschirm, Größe ----
+let look: OverlayConfig | null = null;
+
+async function saveLook(patch: Partial<OverlayConfig>) {
+  if (!look) return;
+  look = { ...look, ...patch };
+  try {
+    await invoke("set_overlay", { overlay: look });
+    showError(null);
+  } catch (e) {
+    showError(String(e));
+  }
+}
+
+function option(value: string, label: string, selected: boolean) {
+  const o = document.createElement("option");
+  o.value = value;
+  o.textContent = label;
+  o.selected = selected;
+  return o;
+}
+
+async function loadLook() {
+  if (!voice) await refresh(); // füllt `voice` (Stimme, Tonhöhe …)
+  const a = await invoke<Appearance>("appearance");
+  look = a.overlay;
+  $<HTMLInputElement>("ov-compact").checked = look.compact;
+  $<HTMLSelectElement>("ov-monitor").replaceChildren(
+    option("", "Hauptbildschirm", look.monitor === ""),
+    ...a.monitors.map((m) => option(m.name, m.label, m.name === look!.monitor)),
+  );
+  $("ov-custom").hidden = look.anchor !== "custom";
+  $<HTMLSelectElement>("ov-anchor").value = look.anchor;
+  $<HTMLInputElement>("ov-scale").value = String(look.scale);
+  $("ov-scale-val").textContent = `${Math.round(look.scale * 100)} %`;
+  $<HTMLInputElement>("ov-hide").value = String(look.auto_hide_ms / 1000);
+  $<HTMLInputElement>("ov-reduce").checked = look.reduce_motion;
+  const current = voice?.tts_voice ?? "";
+  $<HTMLSelectElement>("tts-voice").replaceChildren(
+    option("", "Automatisch (deutsche Frauenstimme)", current === ""),
+    ...a.voices.map((v) => option(v.name, `${v.name} · ${v.language}${v.female ? " · weiblich" : ""}`, v.name === current)),
+  );
+}
+document.addEventListener("panco-tab", (e) => {
+  if ((e as CustomEvent<string>).detail === "look") loadLook().catch((err) => showError(String(err)));
+});
+$<HTMLInputElement>("ov-compact").addEventListener("change", (e) => saveLook({ compact: (e.target as HTMLInputElement).checked }));
+$<HTMLSelectElement>("ov-monitor").addEventListener("change", (e) => saveLook({ monitor: (e.target as HTMLSelectElement).value }));
+$<HTMLSelectElement>("ov-anchor").addEventListener("change", (e) => saveLook({ anchor: (e.target as HTMLSelectElement).value as Anchor }));
+$<HTMLInputElement>("ov-scale").addEventListener("input", (e) => {
+  $("ov-scale-val").textContent = `${Math.round(Number((e.target as HTMLInputElement).value) * 100)} %`;
+});
+$<HTMLInputElement>("ov-scale").addEventListener("change", (e) => saveLook({ scale: Number((e.target as HTMLInputElement).value) }));
+$<HTMLInputElement>("ov-hide").addEventListener("change", (e) =>
+  saveLook({ auto_hide_ms: Math.round(Number((e.target as HTMLInputElement).value) * 1000) }),
+);
+$<HTMLInputElement>("ov-reduce").addEventListener("change", (e) => saveLook({ reduce_motion: (e.target as HTMLInputElement).checked }));
+$("ov-preview").addEventListener("click", () => invoke("overlay_preview"));
 $<HTMLInputElement>("overlay").addEventListener("change", (e) => save({ show_overlay: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>("keep").addEventListener("change", (e) => save({ keep_model_secs: Number((e.target as HTMLInputElement).value) }));
 $<HTMLInputElement>("muted").addEventListener("change", (e) => invoke("set_muted", { muted: (e.target as HTMLInputElement).checked }));

@@ -1,9 +1,10 @@
 //! Fenster "Einstellungen & Diagnose" – nur auf Abruf erzeugt, beim Schließen zerstört.
 //! Zeigt RAM/CPU von Panco und der Spracherkennung, Modelle, Wake-Word-Training.
 
-use crate::voice;
-use panco_core::config::{config_path, models_dir, Hotkeys, VoiceSettings};
+use crate::{overlay, voice};
+use panco_core::config::{config_path, models_dir, Hotkeys, OverlayConfig, VoiceSettings};
 use panco_core::platform::ProcStats;
+use panco_core::protocol::{Mood, ServerMessage};
 use panco_voice::model;
 use serde::Serialize;
 use std::sync::atomic::Ordering;
@@ -176,4 +177,50 @@ pub fn train_start(app: AppHandle) {
 #[tauri::command]
 pub fn train_cancel(app: AppHandle) {
     voice::get(&app).svc.send(panco_voice::Ctl::TrainCancel);
+}
+
+#[derive(Serialize)]
+pub struct Appearance {
+    overlay: OverlayConfig,
+    monitors: Vec<overlay::MonitorInfo>,
+    voices: Vec<panco_voice::tts::VoiceInfo>,
+}
+
+/// Reiter "Aussehen & Stimme": Overlay-Einstellungen, Bildschirme, installierte Stimmen.
+#[tauri::command]
+pub async fn appearance(app: AppHandle) -> Appearance {
+    Appearance {
+        overlay: crate::engine(&app).config().overlay,
+        monitors: overlay::monitors(&app),
+        voices: tauri::async_runtime::spawn_blocking(panco_voice::tts::voices).await.unwrap_or_default(),
+    }
+}
+
+#[tauri::command]
+pub fn set_overlay(app: AppHandle, mut overlay: OverlayConfig) -> Result<(), String> {
+    overlay.scale = overlay.scale.clamp(0.75, 1.5);
+    overlay.auto_hide_ms = overlay.auto_hide_ms.min(60_000);
+    // Offenes Overlay schließen, damit das nächste schon die neue Position/Größe hat.
+    overlay::hide(&app);
+    let engine = crate::engine(&app);
+    let mut cfg = engine.config();
+    cfg.overlay = overlay;
+    cfg.save(&config_path()).map_err(|e| e.to_string())?;
+    engine.set_config(cfg);
+    Ok(())
+}
+
+/// Zeigt Mini-Panco an der eingestellten Stelle – zum Ausprobieren von Position und Größe.
+#[tauri::command]
+pub fn overlay_preview(app: AppHandle) {
+    overlay::hide(&app);
+    overlay::show(&app, false);
+    let text = "So sehe ich hier aus. Zieh mich am Gesicht, wohin du willst.";
+    overlay::emit(&app, &ServerMessage::reply("vorschau", true, text, Mood::Success, None));
+}
+
+/// Probe der eingestellten Stimme.
+#[tauri::command]
+pub fn tts_preview(app: AppHandle) {
+    voice::preview(&app);
 }

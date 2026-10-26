@@ -14,17 +14,107 @@ body {
   display: none !important;
 }
 
+/* Das Fenster passt sich der Karte an (main.ts → overlay_size), nicht umgekehrt. */
 .card {
+  position: relative;
   box-sizing: border-box;
-  min-height: 100%;
+  width: 560px;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 16px 20px 16px 12px;
+  padding: 16px 36px 16px 12px;
   border-radius: var(--pc-radius-l);
   background: var(--pc-surface);
   border: 1px solid var(--pc-line);
   animation: card-in var(--pc-dur-med) var(--pc-ease-pop) both;
+}
+
+/* Mini-Panco (bei "Panco, …"): kleines Icon + erkannter Text, keine Eingabezeile */
+.is-mini .card {
+  width: max-content;
+  min-width: 96px;
+  max-width: 380px;
+  gap: 10px;
+  padding: 8px 30px 8px 8px;
+  border-radius: 999px;
+  animation-name: mini-in;
+}
+.is-mini .card.has-more {
+  border-radius: var(--pc-radius-l);
+}
+.is-mini .avatar {
+  flex-basis: 56px;
+  width: 56px;
+}
+.is-mini .main {
+  gap: 6px;
+}
+.is-mini .prompt,
+.is-mini .hint {
+  display: none;
+}
+.is-mini .heard {
+  margin: 0;
+  font-size: 13px;
+  white-space: normal;
+}
+.is-mini .bubble {
+  padding: 6px 10px;
+  font-size: 14px;
+}
+.is-mini .btn {
+  padding: 4px 12px;
+  font-size: 13px;
+}
+.is-mini .choices {
+  max-height: 180px;
+}
+@keyframes mini-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+/* Wegklicken (z. B. wenn Panco versehentlich aufgeht) */
+.close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pc-text-dim);
+  cursor: pointer;
+  opacity: 0.7;
+}
+.close svg {
+  width: 10px;
+  height: 10px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+.close:hover,
+.close:focus-visible {
+  outline: none;
+  opacity: 1;
+  color: var(--pc-text);
+  background: rgba(255, 255, 255, 0.1);
+}
+.is-mini .close {
+  top: 50%;
+  margin-top: -11px;
+  right: 6px;
+}
+.is-mini .card.has-more .close {
+  top: 8px;
+  margin-top: 0;
 }
 
 /* Einblenden: hüpft von unten herein */
@@ -39,6 +129,7 @@ body {
   flex: 0 0 120px;
   position: relative;
   --level: 0;
+  cursor: grab;
 }
 /* Schallwellen hinter dem Avatar, pulsieren mit dem Mikrofonpegel (nur transform/opacity) */
 .avatar::before {
@@ -87,6 +178,9 @@ body {
   }
 }
 
+.heard.is-waiting {
+  font-style: italic;
+}
 .heard {
   margin: 0 0 -4px;
   font-size: 12px;

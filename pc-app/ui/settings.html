@@ -16,6 +16,7 @@
 
     <nav class="tabs" role="tablist">
       <button class="tab" data-tab="voice" type="button">Sprache & Diagnose</button>
+      <button class="tab" data-tab="look" type="button">Aussehen & Stimme</button>
       <button class="tab" data-tab="files" type="button">Ordner & Backup</button>
       <button class="tab" data-tab="notes" type="button">Notizen</button>
       <button class="tab" data-tab="log" type="button">Protokoll</button>
@@ -68,10 +69,6 @@
         <span class="dim small range-legend"><span>empfindlich</span><span>streng</span></span>
       </label>
       <label class="field row">
-        <span class="label">Antworten vorlesen</span>
-        <input type="checkbox" id="speak" class="switch" />
-      </label>
-      <label class="field row">
         <span class="label">Overlay bei Sprachbefehlen zeigen</span>
         <input type="checkbox" id="overlay" class="switch" />
       </label>
@@ -102,6 +99,81 @@
       </dl>
       <p class="dim small">Änderbar in <code id="cfg-path"></code></p>
     </section>
+    </div>
+
+    <div class="panel" data-panel="look" hidden>
+      <section class="card">
+        <h2>Panco auf dem Bildschirm</h2>
+        <label class="field row">
+          <span class="label">Bei „Panco, …“ nur kleines Icon mit dem Erkannten</span>
+          <input type="checkbox" id="ov-compact" class="switch" />
+        </label>
+        <label class="field">
+          <span class="label">Bildschirm</span>
+          <select id="ov-monitor" class="select"></select>
+        </label>
+        <label class="field">
+          <span class="label">Position</span>
+          <select id="ov-anchor" class="select">
+            <option value="top_left">oben links</option>
+            <option value="top_center">oben Mitte</option>
+            <option value="top_right">oben rechts</option>
+            <option value="bottom_left">unten links</option>
+            <option value="bottom_center">unten Mitte</option>
+            <option value="bottom_right">unten rechts</option>
+            <option value="center">Mitte</option>
+            <option value="custom" id="ov-custom">eigene Stelle (gezogen)</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">Größe <span class="dim" id="ov-scale-val"></span></span>
+          <input type="range" id="ov-scale" min="0.75" max="1.5" step="0.05" />
+          <span class="dim small range-legend"><span>klein</span><span>groß</span></span>
+        </label>
+        <label class="field row">
+          <span class="label">Antwort mindestens so lange zeigen (Sekunden)</span>
+          <input type="number" id="ov-hide" min="0.5" max="30" step="0.5" class="num" />
+        </label>
+        <label class="field row">
+          <span class="label">Animationen reduzieren</span>
+          <input type="checkbox" id="ov-reduce" class="switch" />
+        </label>
+        <p class="dim small">Panco am Gesicht ziehen, um ihn zu verschieben – die Stelle wird gemerkt. ✕ oder Esc schließt ihn sofort.</p>
+        <div class="actions">
+          <button id="ov-preview" class="btn" type="button">Ausprobieren</button>
+          <span class="dim small" id="ov-status"></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Stimme</h2>
+        <label class="field row">
+          <span class="label">Antworten vorlesen</span>
+          <input type="checkbox" id="speak" class="switch" />
+        </label>
+        <label class="field">
+          <span class="label">Stimme</span>
+          <select id="tts-voice" class="select"></select>
+        </label>
+        <label class="field">
+          <span class="label">Tonhöhe <span class="dim" id="tts-pitch-val"></span></span>
+          <input type="range" id="tts-pitch" min="0.5" max="2" step="0.05" />
+          <span class="dim small range-legend"><span>tief</span><span>hoch</span></span>
+        </label>
+        <label class="field">
+          <span class="label">Tempo <span class="dim" id="tts-rate-val"></span></span>
+          <input type="range" id="tts-rate" min="0.6" max="1.8" step="0.05" />
+          <span class="dim small range-legend"><span>langsam</span><span>schnell</span></span>
+        </label>
+        <label class="field row">
+          <span class="label">Bei Rückfragen dazwischenreden</span>
+          <input type="checkbox" id="barge" class="switch" />
+        </label>
+        <p class="dim small">Panco hört bei einer Rückfrage schon zu, während er noch spricht – „ja“ oder „nein“ beendet seinen Satz. Seine eigene Stimme aus den Lautsprechern erkennt er und ignoriert sie.</p>
+        <div class="actions">
+          <button id="tts-preview" class="btn" type="button">Probe hören</button>
+        </div>
+      </section>
     </div>
 
     <div class="panel" data-panel="files" hidden>

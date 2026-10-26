@@ -18,6 +18,15 @@ Diese Regeln sind verbindlich. Im Zweifel gilt: sicher und sparsam vor bequem.
   transkribierte *Text* im Claude-Modus geht an die Anthropic-API.
 - Mikrofon-Indikator im Tray, Mute-Hotkey, Not-Aus (Tray + Hotkey) deaktiviert Panco sofort.
 - Im Game Mode bleibt das Wake-Word an; CPU-Last wird gemessen und berichtet.
+- Bei Rückfragen darf ich dazwischenreden (Panco hört schon zu, während er spricht); Pancos eigene
+  Stimme aus den Lautsprechern wird erkannt und ignoriert.
+- Stimme: süß/hell passend zum Avatar (Windows-Stimme mit höherer Tonhöhe); Stimme, Tonhöhe, Tempo einstellbar.
+
+## Overlay
+- Bei "Panco, …" nur **Mini-Panco**: kleines Icon + erkannter Text, keine große Karte. Die volle Karte mit
+  Eingabezeile nur per Strg+Leertaste. **Nie ungefragt groß in der Bildschirmmitte.**
+- Bildschirm, Position (Ecke) und Größe sind einstellbar; per Ziehen verschoben wird die Stelle gemerkt.
+- ✕/Esc schließt sofort und bricht Zuhören, Vorlesen und offene Rückfragen ab.
 
 ## Aktionen: drei Stufen (keine freie Shell)
 Es gibt **keine freie Shell-Ausführung**. Alle Aktionen sind definierte, validierte Module.

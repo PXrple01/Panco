@@ -13,6 +13,8 @@ interface UiSettings {
   auto_hide_ms: number;
   enabled: boolean;
   state: State;
+  /** Mini-Panco (per "Panco, …" geöffnet): kleines Icon + erkannter Text, keine Eingabezeile. */
+  compact: boolean;
   /** Antwort und erkannter Text, die eintrafen, während das Overlay noch lud. */
   pending: ServerMessage | null;
   heard: string | null;
@@ -48,7 +50,14 @@ let counter = 0;
 const history: string[] = [];
 let historyPos = 0;
 
+const card = $<HTMLDivElement>("card");
+let mini = false;
+let hasHeard = false;
+
+/** Ausblenden, wenn alles erledigt ist. */
 const hide = () => invoke("hide_overlay");
+/** Wegklicken (✕/Esc): bricht auch Zuhören, Vorlesen und eine offene Rückfrage ab. */
+const dismiss = () => invoke("overlay_dismiss");
 const send = (msg: ClientMessage) => invoke<ServerMessage>("send", { msg }).then(handle).catch((e) => say(String(e), true));
 
 /** Sprechblase mit Schreibmaschinen-Effekt (höchstens zwei Sätze, Text kommt kurz aus Rust). */
@@ -60,15 +69,20 @@ function say(text: string, isError = false) {
   bubble.style.animation = "none";
   void bubble.offsetWidth;
   bubble.style.animation = "";
-  if (settings.reduce_motion) {
+  // Mini-Panco: ganzer Text sofort (die Fenstergröße folgt dem Text).
+  if (settings.reduce_motion || mini) {
     bubble.textContent = text;
+    fitSize();
     return;
   }
   let i = 0;
   bubble.textContent = "";
   typeTimer = window.setInterval(() => {
     bubble.textContent = text.slice(0, ++i);
-    if (i >= text.length) window.clearInterval(typeTimer);
+    if (i >= text.length) {
+      window.clearInterval(typeTimer);
+      fitSize();
+    }
   }, 18);
 }
 
@@ -99,16 +113,26 @@ function showChoices(choices: Choice[] | undefined) {
     });
     choicesBox.append(btn);
   }
-  fitHeight();
+  fitSize();
 }
 
-/** Fensterhöhe an den Inhalt anpassen. */
-function fitHeight() {
-  requestAnimationFrame(() => {
-    const card = $<HTMLDivElement>("card");
-    invoke("overlay_height", { height: Math.ceil(card.scrollHeight) }).catch(() => {});
-  });
+/** Fenster folgt der Karte (Rust rechnet die eingestellte Größe und Position ein). */
+let lastSize = "";
+new ResizeObserver(() => {
+  const size = { width: card.offsetWidth, height: card.offsetHeight };
+  const key = `${size.width}x${size.height}`;
+  if (key === lastSize) return;
+  lastSize = key;
+  invoke("overlay_size", size).catch(() => {});
+}).observe(card);
+
+/** Mehrzeiliger Mini-Panco bekommt Ecken statt Pillenform. */
+function fitSize() {
+  requestAnimationFrame(() => card.classList.toggle("has-more", card.offsetHeight > 80));
 }
+
+/** Zeit zum Lesen: mindestens die eingestellte Anzeigedauer, bei langen Antworten länger. */
+const readMs = (text: string) => Math.min(8000, Math.max(settings.auto_hide_ms, text.length * 55));
 
 function handle(msg: ServerMessage) {
   // Zustandsmeldungen ("idle" nach der Antwort) dürfen das Ausblenden nicht abbrechen –
@@ -124,12 +148,13 @@ function handle(msg: ServerMessage) {
       say(msg.text, !msg.ok && msg.mood === "error");
       react(msg.mood);
       showChoices(msg.choices);
-      // Erfolg: kurz zeigen, dann weg. Fehler: länger zeigen – aber ein per Sprache (ohne Fokus)
+      // Erfolg: lesen lassen, dann weg. Fehler: länger zeigen – aber ein per Sprache (ohne Fokus)
       // geöffnetes Overlay verschwindet immer von selbst, es soll kein Spiel verdecken.
       // Mit Auswahl bleibt das Overlay offen, bis man gewählt hat.
-      if (settings.auto_hide_ms > 0 && !msg.choices?.length && (msg.ok || !document.hasFocus())) {
-        hideTimer = window.setTimeout(hide, msg.ok ? settings.auto_hide_ms : settings.auto_hide_ms * 2.5);
+      if (settings.auto_hide_ms > 0 && !msg.choices?.length && (msg.ok || mini || !document.hasFocus())) {
+        hideTimer = window.setTimeout(hide, msg.ok ? readMs(msg.text) : readMs(msg.text) * 2);
       }
+      fitSize();
       break;
     case "confirm_request":
       pendingConfirm = msg;
@@ -137,7 +162,7 @@ function handle(msg: ServerMessage) {
       confirmRow.hidden = false;
       confirmHint.textContent = msg.pc_only ? "nur per Klick" : "oder „ja“ tippen";
       showChoices(msg.choices);
-      $<HTMLButtonElement>("yes").focus();
+      if (!mini) $<HTMLButtonElement>("yes").focus();
       break;
     case "state":
       showState(msg);
@@ -154,6 +179,13 @@ function showState(msg: State) {
   avatarHost.classList.toggle("is-hearing", msg.mic === "recording");
   mic.dataset.state = msg.mic;
   mic.title = MIC_LABEL[msg.mic] ?? "";
+  // Mini-Panco: zeigen, dass er zuhört, bis der erkannte Text da ist.
+  if (mini && !hasHeard && (msg.mic === "recording" || msg.avatar === "listening")) {
+    heard.hidden = false;
+    heard.classList.add("is-waiting");
+    heard.textContent = "Ich höre zu …";
+    fitSize();
+  }
   // Per Sprache geöffnet, aber nichts gesagt → still wieder verschwinden.
   if (msg.avatar === "idle" && lastAvatar === "listening" && !document.hasFocus()) {
     hideTimer = window.setTimeout(hide, 1200);
@@ -182,13 +214,26 @@ input.addEventListener("keydown", (e) => {
 for (const [id, accept] of [["yes", true], ["no", false]] as const) {
   $<HTMLButtonElement>(id).addEventListener("click", () => {
     if (pendingConfirm) send({ type: "confirm", confirm_id: pendingConfirm.confirm_id, accept });
-    input.focus();
+    if (!mini) input.focus();
   });
 }
 
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") hide();
+  if (e.key === "Escape") dismiss();
 });
+$<HTMLButtonElement>("close").addEventListener("click", dismiss);
+// Am Avatar ziehen verschiebt Panco; die Position wird gemerkt.
+avatarHost.addEventListener("mousedown", (e) => {
+  if (e.button === 0) invoke("overlay_drag").catch(() => {});
+});
+
+/** Von Mini-Panco zur vollen Karte (Strg+Leertaste, während er schon offen ist). */
+function setMini(on: boolean) {
+  mini = on;
+  document.body.classList.toggle("is-mini", on);
+  if (!on) input.focus();
+  fitSize();
+}
 
 /** Avatar atmet nur, solange etwas passiert; nach 10 s Ruhe hält er still (CPU sparen). */
 function wake() {
@@ -200,14 +245,18 @@ for (const ev of ["keydown", "pointermove", "pointerdown"]) window.addEventListe
 
 /** Was die Spracherkennung verstanden hat – zur Kontrolle klein über der Sprechblase. */
 function showHeard(text: string) {
+  hasHeard = true;
   heard.hidden = false;
+  heard.classList.remove("is-waiting");
   heard.textContent = `„${text}“`;
+  fitSize();
 }
 
 // Nachrichten, die nicht aus einer Eingabe hier stammen (Sprache, iPhone, Not-Aus).
 const listening = Promise.all([
   listen<ServerMessage>("panco://message", (e) => handle(e.payload)),
   listen<string>("panco://heard", (e) => showHeard(e.payload)),
+  listen<string>("panco://mode", (e) => setMini(e.payload === "mini")),
 ]);
 
 (async () => {
@@ -219,8 +268,9 @@ const listening = Promise.all([
   if (settings.show_avatar) avatar = new PancoAvatar(avatarHost, { reduced: settings.reduce_motion });
   else avatarHost.classList.add("is-off");
   wake();
+  setMini(ui.compact);
   showState(ui.state);
   if (ui.heard) showHeard(ui.heard);
   if (ui.pending) handle(ui.pending);
-  input.focus();
+  fitSize();
 })();

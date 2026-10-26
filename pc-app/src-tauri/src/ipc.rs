@@ -24,6 +24,8 @@ pub struct UiSettings {
     show_avatar: bool,
     auto_hide_ms: u64,
     enabled: bool,
+    /// Mini-Panco (per Sprache geöffnet) statt voller Karte
+    compact: bool,
     /// Aktueller Avatar-/Mikrofonzustand (das Overlay wird oft erst nach einem Ereignis erzeugt).
     state: ServerMessage,
     /// Antwort/Rückfrage und erkannter Text, die eintrafen, während das Overlay noch lud.
@@ -41,17 +43,32 @@ pub fn ui_settings(app: AppHandle) -> UiSettings {
         show_avatar: o.show_avatar,
         auto_hide_ms: o.auto_hide_ms,
         enabled: engine.enabled(),
+        compact: overlay::is_compact(),
         state: crate::state_message(&app),
         pending,
         heard,
     }
 }
 
-/// Overlay-Höhe an den Inhalt anpassen (z. B. Trefferliste). Begrenzt, damit es nie den Bildschirm füllt.
+/// Overlay-Größe an den Inhalt anpassen (CSS-Pixel bei Größe 1.0; Rust rechnet Größe und Ecke ein).
 #[tauri::command]
-pub fn overlay_height(app: AppHandle, height: f64) {
-    if let Some(w) = tauri::Manager::get_webview_window(&app, overlay::LABEL) {
-        let h = height.clamp(150.0, 560.0);
-        let _ = w.set_size(tauri::LogicalSize::new(overlay::WIDTH, h));
+pub fn overlay_size(app: AppHandle, width: f64, height: f64) {
+    overlay::resize(&app, width, height);
+}
+
+/// Am Avatar ziehen verschiebt das Overlay.
+#[tauri::command]
+pub fn overlay_drag(app: AppHandle) {
+    overlay::drag(&app);
+}
+
+/// ✕ / Esc: versehentlich geöffnet? Zuhören, Vorlesen und eine offene Rückfrage abbrechen, ausblenden.
+#[tauri::command]
+pub async fn overlay_dismiss(app: AppHandle) {
+    crate::voice::cancel(&app);
+    let engine = crate::engine(&app);
+    if engine.has_pending() {
+        engine.confirm(None, false, panco_core::engine::ConfirmVia::PcClick);
     }
+    overlay::hide(&app);
 }

@@ -5,6 +5,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod crash;
 mod data;
 mod hotkeys;
 mod ipc;
@@ -60,6 +61,7 @@ pub fn reload_config(app: &AppHandle) {
 }
 
 fn main() {
+    crash::install(data_dir().join("logs"));
     let (config, cfg_err) = Config::load_or_create(&config_path());
     if let Some(e) = cfg_err {
         eprintln!("[panco] {e}");
@@ -78,8 +80,14 @@ fn main() {
             ipc::send,
             ipc::hide_overlay,
             ipc::ui_settings,
-            ipc::overlay_height,
+            ipc::overlay_size,
+            ipc::overlay_drag,
+            ipc::overlay_dismiss,
             settings::status,
+            settings::appearance,
+            settings::set_overlay,
+            settings::overlay_preview,
+            settings::tts_preview,
             settings::set_voice,
             settings::set_muted,
             settings::download_model,

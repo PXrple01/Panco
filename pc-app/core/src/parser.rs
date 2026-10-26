@@ -92,6 +92,24 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
             ),
             |_| intent("panco.undo", json!({})),
         ),
+        // --- Uhrzeit, Datum, Hilfe ---
+        rule(
+            r"^(?:wie spät|wie viel uhr|wieviel uhr|was ist die uhrzeit)(?: ist es| haben wir| isses)?(?: gerade| grad| eigentlich)?$|^(?:sag mir |nenn mir )?(?:die )?uhrzeit$",
+            |_| intent("info.time", json!({"what": "time"})),
+        ),
+        rule(
+            r"^(?:welcher tag ist (?:heute|es)|welchen tag haben wir(?: heute)?|was (?:ist|haben wir) heute für ein (?:tag|datum)|welches datum (?:ist )?(?:heute|haben wir(?: heute)?)|der wievielte ist heute|(?:sag mir )?(?:das )?(?:heutige )?datum)$",
+            |_| intent("info.time", json!({"what": "date"})),
+        ),
+        rule(
+            r"^(?:was kannst du(?: alles)?(?: machen| tun)?|hilfe|was kann ich (?:dich )?fragen|wie funktionierst du|was kann panco)$",
+            |_| intent("panco.help", json!({})),
+        ),
+        // Bildschirm/Fenster vorlesen kommt mit dem Claude-Assistenten – bis dahin ehrlich sagen.
+        rule(
+            r"^(?:(?:lies|lese|les|läs|lees)(?: mir)?(?: vor)? was (?:im|in dem|auf dem|in meinem|am|da im) (?:editor|fenster|bildschirm|screen|monitor|browser|chat)|was steht (?:da|hier|im|in dem|auf dem) (?:editor|fenster|bildschirm|screen|monitor|browser|chat)?)\b.*$",
+            |_| intent("panco.help", json!({"topic": "screen"})),
+        ),
         // --- Ton ---
         rule(r"^(?:ton aus|stumm|stummschalten|schalt(?:e)? (?:den ton |alles )?stumm|mute|lautlos)$", |_| {
             intent("volume.mute", json!({"mute": true}))
@@ -367,9 +385,51 @@ pub fn yes_no(normalized: &str) -> Option<bool> {
     }
 }
 
+/// Antwort auf eine Rückfrage aus dem Erkannten lösen. Hört das Mikro Pancos eigene Frage aus den
+/// Lautsprechern mit, steht sie im Text – dann zählt nur, was danach kam. `None` = nur Echo.
+pub fn answer_text(text: &str, asked: Option<&str>) -> Option<String> {
+    use normalize::command;
+    if yes_no(&command(text)).is_some() {
+        return Some(text.to_string());
+    }
+    let Some(asked) = asked else { return Some(text.to_string()) };
+    let spoken: Vec<String> = command(asked).split(' ').map(str::to_string).collect();
+    let is_echo = |part: &str| {
+        let words: Vec<String> = command(part).split(' ').filter(|w| !w.is_empty()).map(str::to_string).collect();
+        let known = words.iter().filter(|w| spoken.contains(w)).count();
+        !words.is_empty() && known * 10 >= words.len() * 6
+    };
+    // Letzter Satz ist eine Antwort, davor nur Echo: "Soll ich … löschen? Sag ja oder nein. Ja."
+    let sentences: Vec<&str> = text.split_inclusive(['.', '!', '?']).map(str::trim).filter(|s| !s.is_empty()).collect();
+    if let Some((last, before)) = sentences.split_last() {
+        if yes_no(&command(last)).is_some() && before.iter().all(|s| is_echo(s)) {
+            return Some(last.to_string());
+        }
+    }
+    if is_echo(text) {
+        None
+    } else {
+        Some(text.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn echo_of_own_question_is_ignored() {
+        let asked = Some("Soll ich Rechnung.pdf in den Papierkorb legen? Sag ja oder nein.");
+        assert_eq!(answer_text("Ja.", asked).as_deref(), Some("Ja."));
+        assert_eq!(answer_text("Soll ich Rechnung PDF in den Papierkorb legen?", asked), None);
+        assert_eq!(answer_text("Sag ja oder nein.", asked), None);
+        assert_eq!(
+            answer_text("Soll ich Rechnung PDF in den Papierkorb legen? Sag ja oder nein. Nein.", asked).as_deref(),
+            Some("Nein.")
+        );
+        // Etwas anderes als die Frage: normal als Befehl weitergeben
+        assert_eq!(answer_text("Öffne lieber Discord", asked).as_deref(), Some("Öffne lieber Discord"));
+    }
 
     fn p(text: &str) -> Option<(&'static str, Value)> {
         parse_text(text).map(|i| (i.action, i.params))
@@ -489,6 +549,12 @@ mod tests {
         assert_eq!(p("Leg einen neuen Ordner Projekte an"), Some(("folder.create", json!({"name": "Projekte"}))));
         assert_eq!(p("mach einen Screenshot"), Some(("screen.screenshot", json!({}))));
         assert_eq!(p("mach das rückgängig"), Some(("panco.undo", json!({}))));
+        assert_eq!(p("Wie viel Uhr ist es gerade?"), Some(("info.time", json!({"what": "time"}))));
+        assert_eq!(p("Panco, wie spät ist es?"), Some(("info.time", json!({"what": "time"}))));
+        assert_eq!(p("Welcher Tag ist heute?"), Some(("info.time", json!({"what": "date"}))));
+        assert_eq!(p("Was kannst du alles?"), Some(("panco.help", json!({}))));
+        assert_eq!(p("Lese mir vor, was in dem Editor steht."), Some(("panco.help", json!({"topic": "screen"}))));
+        assert_eq!(p("Läs mir vor, was in dem Editor steht."), Some(("panco.help", json!({"topic": "screen"}))));
         assert_eq!(p("Panko, macht das Röckgängig."), Some(("panco.undo", json!({}))));
         assert_eq!(p("Rückgängig!"), Some(("panco.undo", json!({}))));
     }

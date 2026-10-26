@@ -85,6 +85,8 @@ pub enum Ctl {
     Ptt(bool),
     /// Nächste Äußerung ohne Wake-Word aufnehmen (Antwort auf Rückfrage).
     ListenOnce,
+    /// Laufende Aufnahme verwerfen (Overlay weggeklickt).
+    Cancel,
     /// Eine Wake-Word-Probe aufnehmen.
     TrainStart,
     TrainCancel,

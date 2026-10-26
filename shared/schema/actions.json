@@ -513,6 +513,43 @@
           }
         }
       }
+    },
+    {
+      "id": "info.time",
+      "tier": 1,
+      "remote": true,
+      "title": "Uhrzeit/Datum",
+      "description": "Sagt die aktuelle Uhrzeit (what=time) oder das heutige Datum mit Wochentag (what=date).",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "what": {
+            "enum": [
+              "time",
+              "date"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "panco.help",
+      "tier": 1,
+      "remote": true,
+      "title": "Hilfe",
+      "description": "Erklärt kurz, was Panco kann. topic=screen: Bildschirm/Fenster vorlesen (kommt mit dem Claude-Assistenten).",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "topic": {
+            "enum": [
+              "screen"
+            ]
+          }
+        }
+      }
     }
   ]
 }

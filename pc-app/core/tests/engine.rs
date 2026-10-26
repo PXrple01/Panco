@@ -79,7 +79,7 @@ fn voice_ignores_leftover_first_word() {
     assert_eq!(pf.take_calls(), vec!["open steam://rungameid/1422450"]);
     // Getippt gilt das nicht – da ist der Text genau so gemeint.
     let r = e.command("r2", "quatsch öffne Deadlock", Source::Text);
-    assert_eq!(r.text(), "Das habe ich nicht verstanden, Chef.");
+    assert_eq!(r.text(), "Das kann ich noch nicht. Frag mich „Was kannst du?“");
 }
 
 #[test]
@@ -201,7 +201,10 @@ fn confirmation_expires() {
 fn not_understood() {
     let (e, _) = setup();
     let r = say(&e, "Wie wird das Wetter?");
-    assert_eq!(r, ServerMessage::reply("r1", false, "Das habe ich nicht verstanden, Chef.", Mood::Confused, None));
+    assert_eq!(
+        r,
+        ServerMessage::reply("r1", false, "Das kann ich noch nicht. Frag mich „Was kannst du?“", Mood::Confused, None)
+    );
 }
 
 #[test]
@@ -222,4 +225,14 @@ fn everything_is_logged_to_jsonl() {
     assert_eq!(lines[0]["text"], "öffne Deadlock");
     assert_eq!(lines[0]["action"], "app.launch");
     std::fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn time_date_and_help() {
+    let (e, _) = setup();
+    let r = say(&e, "Wie viel Uhr ist es gerade?");
+    assert!(r.text().starts_with("Es ist ") && r.text().ends_with(" Uhr."), "{}", r.text());
+    assert!(say(&e, "Welcher Tag ist heute?").text().starts_with("Heute ist "));
+    assert!(say(&e, "Was kannst du?").text().starts_with("Ich kann "));
+    assert!(say(&e, "Lies mir vor, was im Editor steht").text().contains("Claude"));
 }

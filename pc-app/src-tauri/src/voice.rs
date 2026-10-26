@@ -5,7 +5,7 @@ use crate::{overlay, tray};
 use panco_core::config::{models_dir, wakeword_path, SttChoice, VoiceMode};
 use panco_core::protocol::{AvatarState, MicState, ServerMessage};
 use panco_core::{Engine, Source};
-use panco_voice::tts::Speaker;
+use panco_voice::tts::{Speaker, TtsSettings};
 use panco_voice::{model, Ctl, Event, Mode, Purpose, SttEngine, VoiceConfig, VoiceService};
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -15,6 +15,8 @@ use tauri::{AppHandle, Emitter, Manager};
 pub struct Voice {
     pub svc: VoiceService,
     speaker: Speaker,
+    /// Gerade vorgelesene Rückfrage – um die eigene Stimme (Lautsprecher-Echo) zu erkennen.
+    asked: Mutex<Option<String>>,
     pub muted: AtomicBool,
     pub mic: Mutex<MicState>,
     pub avatar: Mutex<AvatarState>,
@@ -37,6 +39,7 @@ pub fn start(app: &AppHandle) {
     app.manage(Voice {
         svc,
         speaker: Speaker::new(),
+        asked: Mutex::new(None),
         muted: AtomicBool::new(false),
         mic: Mutex::new(MicState::Off),
         avatar: Mutex::new(AvatarState::Idle),
@@ -52,7 +55,14 @@ pub fn apply(app: &AppHandle) {
     let Some(v) = try_get(app) else { return };
     let muted = v.muted.load(Ordering::Relaxed);
     v.svc.send(Ctl::Config(build_config(app, muted)));
+    let s = crate::engine(app).config().voice;
+    v.speaker.configure(TtsSettings { voice: s.tts_voice, pitch: s.tts_pitch, rate: s.tts_rate });
     tray::refresh(app);
+}
+
+/// Probe der eingestellten Stimme (Einstellungen).
+pub fn preview(app: &AppHandle) {
+    get(app).speaker.say("Hallo! So klinge ich. Sag einfach meinen Namen, wenn du etwas brauchst.", None);
 }
 
 fn build_config(app: &AppHandle, muted: bool) -> VoiceConfig {
@@ -96,7 +106,7 @@ fn whisper_prompt(engine: &Engine) -> String {
     format!(
         "Panco, öffne Deadlock. Starte Discord. Lautstärke auf 30 Prozent. Nächstes Lied. Such Build Guides. \
          Finde meine letzte Rechnung. Neue Notiz Einkauf: Milch. Lies die Notiz vor. Lösche die Datei. \
-         Mach das rückgängig. Fahr den PC herunter. Ja. Nein. {}",
+         Mach das rückgängig. Wie spät ist es? Was kannst du? Fahr den PC herunter. Ja. Nein. {}",
         list.trim_end_matches(", ")
     )
 }
@@ -132,6 +142,10 @@ fn command_phrases(engine: &Engine) -> Vec<String> {
         "finde meine letzte rechnung",
         "welche notizen habe ich",
         "mach das rückgängig",
+        "wie spät ist es",
+        "wie viel uhr ist es",
+        "welcher tag ist heute",
+        "was kannst du",
         "rückgängig",
         "ja",
         "nein",
@@ -185,6 +199,10 @@ fn on_event(app: &AppHandle, event: Event) {
             tray::refresh(app);
         }
         Event::Wake { .. } => {
+            // "Panco, …" unterbricht, was Panco gerade sagt.
+            if let Some(v) = try_get(app) {
+                v.speaker.stop();
+            }
             // Overlay ohne Fokus: ein laufendes Spiel bleibt im Vordergrund.
             if show_overlay {
                 overlay::show(app, false);
@@ -195,7 +213,7 @@ fn on_event(app: &AppHandle, event: Event) {
         Event::NoSpeech => set_state(app, Some(AvatarState::Idle), None, None),
         Event::Transcript { purpose, transcript } => {
             set_state(app, Some(AvatarState::Thinking), None, None);
-            overlay::heard(app, &transcript.text);
+            overlay::heard(app, &without_wake_word(&transcript.text));
             let app = app.clone();
             std::thread::spawn(move || handle_transcript(&app, purpose, &transcript.text));
         }
@@ -216,25 +234,70 @@ fn on_event(app: &AppHandle, event: Event) {
 }
 
 /// Erkannten Text wie einen getippten Befehl verarbeiten – mit Quelle "voice".
-fn handle_transcript(app: &AppHandle, _purpose: Purpose, text: &str) {
+fn handle_transcript(app: &AppHandle, purpose: Purpose, text: &str) {
     let v = get(app);
+    let mut text = text.to_string();
+    if purpose == Purpose::Answer {
+        let asked = v.asked.lock().unwrap().clone();
+        match panco_core::parser::answer_text(&text, asked.as_deref()) {
+            Some(t) => text = t,
+            None => {
+                // Nur die eigene Stimme aus dem Lautsprecher gehört: weiter auf die Antwort warten.
+                set_state(app, Some(AvatarState::Idle), None, None);
+                if !v.speaker.is_speaking() {
+                    v.svc.send(Ctl::ListenOnce);
+                }
+                return;
+            }
+        }
+        // Eine Antwort ist da: Panco hört auf zu sprechen.
+        v.speaker.stop();
+    }
+    *v.asked.lock().unwrap() = None;
+
     let id = format!("v{}", v.counter.fetch_add(1, Ordering::Relaxed) + 1);
-    let msg = crate::engine(app).command(&id, text, Source::Voice);
+    let msg = crate::engine(app).command(&id, &text, Source::Voice);
     set_state(app, Some(AvatarState::Idle), None, None);
     overlay::emit(app, &msg);
 
-    let speak = crate::engine(app).config().voice.speak_replies;
-    // Bei einer Rückfrage, die per Stimme beantwortet werden darf: nach dem Vorlesen zuhören.
-    let listen_after = matches!(msg, ServerMessage::ConfirmRequest { pc_only: false, .. });
-    let follow_up: Option<panco_voice::tts::Done> = listen_after.then(|| {
+    let voice = crate::engine(app).config().voice;
+    // Bei einer Rückfrage, die per Stimme beantwortet werden darf: zuhören – mit "barge_in"
+    // schon während Panco spricht, sonst erst danach.
+    let question = matches!(msg, ServerMessage::ConfirmRequest { pc_only: false, .. });
+    if question {
+        *v.asked.lock().unwrap() = Some(msg.text().to_string());
+        if voice.barge_in || !voice.speak_replies {
+            v.svc.send(Ctl::ListenOnce);
+        }
+    }
+    let follow_up: Option<panco_voice::tts::Done> = question.then(|| {
         let app = app.clone();
         Box::new(move || get(&app).svc.send(Ctl::ListenOnce)) as panco_voice::tts::Done
     });
-    if speak {
+    if voice.speak_replies {
         v.speaker.say(msg.text(), follow_up);
-    } else if let Some(f) = follow_up {
-        f();
     }
+}
+
+/// "Paanco, neue Notiz …" → "Neue Notiz …" (zur Anzeige; das Wake-Word hat Panco ja schon erkannt).
+fn without_wake_word(text: &str) -> String {
+    let t = text.trim();
+    match t.split_once(char::is_whitespace) {
+        Some((first, rest)) if panco_core::normalize::is_wake_word(first.trim_end_matches([',', '.', '!'])) => {
+            let rest = rest.trim_start_matches([',', ' ']);
+            let mut c = rest.chars();
+            c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+        }
+        _ => t.to_string(),
+    }
+}
+
+/// Weggeklickt: Zuhören und Vorlesen sofort beenden.
+pub fn cancel(app: &AppHandle) {
+    let Some(v) = try_get(app) else { return };
+    *v.asked.lock().unwrap() = None;
+    v.speaker.stop();
+    v.svc.send(Ctl::Cancel);
 }
 
 pub fn set_muted(app: &AppHandle, muted: bool) {

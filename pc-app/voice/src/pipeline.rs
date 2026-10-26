@@ -200,9 +200,22 @@ impl Pipeline {
                     }
                 }
             }
-            Ctl::ListenOnce => {
-                if self.cfg.enabled && !self.cfg.muted && self.cfg.mode != Mode::Off {
-                    self.start_listening(Purpose::Answer, false);
+            Ctl::ListenOnce if self.cfg.enabled && !self.cfg.muted && self.cfg.mode != Mode::Off => {
+                match &mut self.state {
+                    State::Idle => self.start_listening(Purpose::Answer, false),
+                    // Hört schon (Dazwischenreden), aber noch nichts gesagt: Wartezeit ab jetzt neu
+                    // (z. B. wenn Panco gerade fertig gesprochen hat).
+                    State::Recording(rec) if rec.purpose == Purpose::Answer && rec.speech_frames < 5 => {
+                        rec.started = Instant::now();
+                    }
+                    _ => {}
+                }
+            }
+            Ctl::ListenOnce => {}
+            Ctl::Cancel => {
+                if matches!(self.state, State::Recording(ref rec) if !rec.training) {
+                    self.state = State::Idle;
+                    self.emit(Event::NoSpeech);
                 }
             }
             Ctl::TrainStart => {
