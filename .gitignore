@@ -4,3 +4,4 @@ dist/
 tools/out/
 *.log
 .DS_Store
+pc-app/src-tauri/gen/

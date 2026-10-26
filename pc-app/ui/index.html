@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>Panco</title>
+</head>
+<body>
+  <div id="card" class="card">
+    <div id="avatar" class="avatar"></div>
+    <div class="main">
+      <p id="bubble" class="bubble" hidden></p>
+      <div id="confirm" class="confirm" hidden>
+        <button id="yes" class="btn btn--yes" type="button">Ja</button>
+        <button id="no" class="btn" type="button">Nein</button>
+        <span id="confirm-hint" class="hint"></span>
+      </div>
+      <form id="form" class="prompt" autocomplete="off">
+        <input id="input" type="text" maxlength="500" spellcheck="false" placeholder="Was soll ich tun?" aria-label="Befehl" />
+        <kbd>Esc</kbd>
+      </form>
+    </div>
+  </div>
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>

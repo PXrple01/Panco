@@ -1,0 +1,162 @@
+/* Overlay: Glas-Karte mit Avatar, Sprechblase, Befehlszeile. Farben nur über Tokens. */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font: var(--pc-font-size) / 1.4 var(--pc-font);
+  color: var(--pc-text);
+  user-select: none;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.card {
+  box-sizing: border-box;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px 16px 12px;
+  border-radius: var(--pc-radius-l);
+  background: var(--pc-surface);
+  border: 1px solid var(--pc-line);
+  animation: card-in var(--pc-dur-med) var(--pc-ease-pop) both;
+}
+
+/* Einblenden: hüpft von unten herein */
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+}
+
+.avatar {
+  flex: 0 0 120px;
+}
+.avatar.is-off {
+  display: none;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bubble {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--pc-radius-m) var(--pc-radius-m) var(--pc-radius-m) 4px;
+  background: var(--pc-surface-solid);
+  border: 1px solid var(--pc-line);
+  min-height: 1.4em;
+  transform-origin: 0 100%;
+  animation: bubble-pop var(--pc-dur-med) var(--pc-ease-pop) both;
+}
+.bubble.is-error {
+  border-color: rgba(248, 113, 113, 0.5);
+}
+@keyframes bubble-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+
+.prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: var(--pc-radius-m);
+  background: rgba(10, 10, 15, 0.55);
+  border: 1px solid var(--pc-line);
+  transition: box-shadow var(--pc-dur-fast);
+}
+.prompt:focus-within {
+  box-shadow: var(--pc-glow);
+}
+.prompt input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--pc-text);
+  font: inherit;
+  user-select: text;
+}
+.prompt input::placeholder {
+  color: var(--pc-text-dim);
+}
+kbd {
+  font: 11px var(--pc-font);
+  color: var(--pc-text-dim);
+  border: 1px solid var(--pc-line);
+  border-radius: 5px;
+  padding: 1px 6px;
+}
+
+.confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn {
+  font: 600 14px var(--pc-font);
+  color: var(--pc-text);
+  padding: 7px 16px;
+  border-radius: var(--pc-radius-s);
+  border: 1px solid var(--pc-line);
+  background: var(--pc-surface-solid);
+  cursor: pointer;
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--pc-glow);
+}
+.btn--yes {
+  background: var(--pc-accent);
+  border-color: var(--pc-accent-hi);
+}
+.hint {
+  color: var(--pc-text-dim);
+  font-size: 12px;
+}
+
+/* Kurze Reaktionen am Avatar-Host (die volle Animationspalette folgt in Etappe 9) */
+.avatar.mood-success,
+.avatar.mood-game {
+  animation: hop 520ms var(--pc-ease-pop);
+}
+.avatar.mood-confused,
+.avatar.mood-error {
+  animation: tilt 520ms var(--pc-ease-pop);
+}
+@keyframes hop {
+  40% {
+    transform: translateY(-10px) scale(0.97, 1.04);
+  }
+  70% {
+    transform: translateY(0) scale(1.04, 0.96);
+  }
+}
+@keyframes tilt {
+  40% {
+    transform: rotate(-9deg);
+  }
+}
+
+.reduce-motion *,
+.reduce-motion *::before {
+  animation-duration: 1ms !important;
+  transition-duration: 1ms !important;
+}

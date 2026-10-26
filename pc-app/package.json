@@ -1,0 +1,21 @@
+{
+  "name": "panco-pc",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "ui:dev": "vite ui",
+    "ui:build": "vite build ui",
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "check": "tsc -p ui --noEmit"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.4"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4",
+    "typescript": "5.9.3",
+    "vite": "8.3.5"
+  }
+}

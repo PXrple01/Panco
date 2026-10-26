@@ -77,7 +77,7 @@
       }
     },
     "ConfirmRequest": {
-      "description": "Panco braucht eine Bestätigung. pc_only = nur am PC per Klick bestätigbar (Stufe 3, Remote- oder Claude-Anfragen).",
+      "description": "Panco braucht eine Bestätigung oder fragt nach (tier 1 = Rückfrage 'Meinst du …?'). pc_only = nur am PC per Klick bestätigbar (Stufe 3, Remote- oder Claude-Anfragen).",
       "type": "object",
       "additionalProperties": false,
       "required": ["type", "id", "confirm_id", "text", "tier", "expires_in_ms", "pc_only"],
@@ -86,7 +86,7 @@
         "id": { "$ref": "#/$defs/RequestId" },
         "confirm_id": { "$ref": "#/$defs/RequestId" },
         "text": { "type": "string", "maxLength": 300 },
-        "tier": { "enum": [2, 3] },
+        "tier": { "enum": [1, 2, 3] },
         "expires_in_ms": { "type": "integer", "minimum": 0 },
         "pc_only": { "type": "boolean" }
       }

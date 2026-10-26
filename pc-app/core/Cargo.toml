@@ -1,0 +1,37 @@
+[package]
+name = "panco-core"
+description = "Panco-Gehirn: Parser, Aktions-Whitelist mit Stufen, Steam, Protokoll"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+regex = { version = "1.13.1", default-features = false, features = ["std", "unicode-case", "unicode-perl"] }
+strsim = "0.11.1"
+dirs = "7.0.0"
+humantime = "2.4.0"
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.62.2"
+features = [
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Variant",
+  "Win32_System_Registry",
+  "Win32_System_Shutdown",
+  "Win32_System_Threading",
+  "Win32_System_Power",
+  "Win32_Security",
+  "Win32_Media_Audio",
+  "Win32_Media_Audio_Endpoints",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_Input_KeyboardAndMouse",
+]
+
+[dev-dependencies]
+jsonschema = { version = "0.60.1", default-features = false }

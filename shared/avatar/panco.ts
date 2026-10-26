@@ -31,6 +31,14 @@ export class PancoAvatar {
     this.el.classList.toggle("is-reduced", reduced);
   }
 
+  /**
+   * Ruhepause: Atmen anhalten, bis wieder etwas passiert (spart CPU, wenn das Fenster offen
+   * herumsteht). Blinzeln läuft weiter – es kostet nur während der 140 ms.
+   */
+  setResting(resting: boolean): void {
+    this.el.classList.toggle("is-resting", resting);
+  }
+
   /** Entfernt den Avatar und alle Timer/Listener. */
   destroy(): void {
     this.stop();

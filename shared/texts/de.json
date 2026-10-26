@@ -3,6 +3,8 @@
   "not_understood": "Das habe ich nicht verstanden, Chef.",
   "did_you_mean": "Meinst du {name}?",
   "not_found": "{name} finde ich nicht.",
+  "not_running": "{name} läuft gerade nicht.",
+  "pc_confirm_needed": "Das musst du am PC per Klick bestätigen.",
   "disabled": "Ich bin gerade ausgeschaltet.",
   "error": "Das hat nicht geklappt: {reason}",
   "unsupported": "Das kann ich auf diesem System nicht.",

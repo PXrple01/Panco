@@ -2,8 +2,8 @@
   "name": "panco",
   "private": true,
   "description": "Panco – sprachgesteuerter Gaming-Companion (Monorepo)",
-  "workspaces": ["tools"],
+  "workspaces": ["pc-app", "tools"],
   "scripts": {
-    "check": "tsc -p pc-app/ui --noEmit"
+    "check": "npm run -w pc-app check"
   }
 }

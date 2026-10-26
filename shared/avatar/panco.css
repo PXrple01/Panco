@@ -53,8 +53,9 @@
   animation-play-state: paused !important;
 }
 
-/* Reduzierte Bewegung: kein Atmen, nur Blinzeln */
-.panco-wrap.is-reduced {
+/* Reduzierte Bewegung / Ruhepause: kein Atmen, nur Blinzeln */
+.panco-wrap.is-reduced,
+.panco-wrap.is-resting {
   animation: none;
   will-change: auto;
 }

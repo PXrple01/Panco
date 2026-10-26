@@ -1,0 +1,17 @@
+[package]
+name = "panco"
+description = "Panco – sprachgesteuerter Gaming-Companion (Windows)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+panco-core = { path = "../core" }
+tauri = { version = "2.12.5", features = ["tray-icon", "image-png"] }
+tauri-plugin-global-shortcut = "2.4.1"
+tauri-plugin-single-instance = "2.5.4"
+serde.workspace = true
+serde_json.workspace = true

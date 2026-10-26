@@ -25,7 +25,7 @@ export interface ConfirmRequest {
   id: string;
   confirm_id: string;
   text: string;
-  tier: 2 | 3;
+  tier: 1 | 2 | 3; // 1 = Rückfrage "Meinst du …?"
   expires_in_ms: number;
   pc_only: boolean;
 }
