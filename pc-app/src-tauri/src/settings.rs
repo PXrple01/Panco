@@ -71,6 +71,8 @@ pub struct Status {
     models: Vec<ModelRow>,
     voice: VoiceSettings,
     games: usize,
+    /// Laufendes Spiel (Game Mode)
+    game: Option<panco_core::playtime::Running>,
     config_path: String,
     hotkeys: Hotkeys,
 }
@@ -116,6 +118,7 @@ pub fn status(app: AppHandle) -> Status {
             .collect(),
         voice: engine.config().voice,
         games: engine.games().len(),
+        game: engine.current_game(),
         config_path: config_path().to_string_lossy().into(),
         hotkeys: engine.config().hotkeys,
     };

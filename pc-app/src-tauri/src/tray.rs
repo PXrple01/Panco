@@ -82,7 +82,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             "config" => open_file(app, &config_path().to_string_lossy()),
             "reload" => crate::reload_config(app),
             "log" => open_file(app, &data_dir().join("logs").to_string_lossy()),
-            "quit" => app.exit(0),
+            "quit" => {
+                crate::engine(app).flush_playtime();
+                app.exit(0)
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -139,6 +142,10 @@ pub fn refresh(app: &AppHandle) {
             }
             _ => (ICON_NORMAL, "Panco – Mikro aus"),
         }
+    };
+    let tip = match engine.current_game() {
+        Some(g) => format!("{tip} · Game Mode: {}", g.name),
+        None => tip.to_string(),
     };
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         if let Ok(img) = Image::from_bytes(icon) {

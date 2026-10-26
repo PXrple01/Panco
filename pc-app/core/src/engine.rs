@@ -37,6 +37,8 @@ pub enum Source {
     Remote { device: String },
     /// Tool-Aufruf von Claude (Etappe 7).
     Claude,
+    /// Eine selbst eingerichtete Regel ("Wenn ich Deadlock starte, …") – nur Stufe 1.
+    Rule,
 }
 
 impl Source {
@@ -46,6 +48,7 @@ impl Source {
             Source::Voice => "voice".into(),
             Source::Remote { device } => format!("remote:{device}"),
             Source::Claude => "claude".into(),
+            Source::Rule => "regel".into(),
         }
     }
 
@@ -109,6 +112,12 @@ pub struct Engine {
     pending: Mutex<Option<Pending>>,
     registry: Vec<Box<dyn Action>>,
     counter: AtomicU64,
+    /// Spielzeit + laufendes Spiel (beim ersten Bedarf aus spielzeit.json geladen)
+    play: Mutex<Option<crate::playtime::Tracker>>,
+    /// Letzte erfolgreiche Aktion (für "nochmal" und "schließ es")
+    last: Mutex<Option<(String, Value)>>,
+    /// "10 Minuten nicht mehr fragen": bis dahin laufen Stufe-2-Befehle vom PC ohne Rückfrage.
+    quiet_until: Mutex<Option<Instant>>,
 }
 
 impl Engine {
@@ -123,6 +132,9 @@ impl Engine {
             pending: Mutex::new(None),
             registry: actions::registry(),
             counter: AtomicU64::new(0),
+            play: Mutex::new(None),
+            last: Mutex::new(None),
+            quiet_until: Mutex::new(None),
         }
     }
 
@@ -196,6 +208,77 @@ impl Engine {
         *self.games.write().unwrap() = Some(games);
     }
 
+    // ---------- Spiele ----------
+
+    fn with_play<R>(&self, f: impl FnOnce(&mut crate::playtime::Tracker) -> R) -> R {
+        let mut slot = self.play.lock().unwrap();
+        let tracker =
+            slot.get_or_insert_with(|| crate::playtime::Tracker::load(&self.data_dir().join("spielzeit.json")));
+        f(tracker)
+    }
+
+    /// Welches Spiel läuft? Steam meldet die App-ID; andere Spiele über bekannte Exe-Namen.
+    pub fn detect_game(&self, steam_app: Option<u32>, processes: &[String]) -> Option<String> {
+        if let Some(id) = steam_app {
+            let name = self.games().into_iter().find(|g| g.app_id == id).map(|g| g.name);
+            return Some(name.unwrap_or_else(|| format!("Steam-Spiel {id}")));
+        }
+        let known = &self.config.read().unwrap().game_processes;
+        processes.iter().find_map(|p| known.iter().find(|(exe, _)| exe.eq_ignore_ascii_case(p)).map(|(_, n)| n.clone()))
+    }
+
+    /// Neue Beobachtung der Spiel-Erkennung; Start/Ende landen im Protokoll.
+    pub fn observe_game(&self, running: Option<&str>) -> Vec<crate::playtime::Change> {
+        let offset = self.platform.utc_offset_secs();
+        let changes = self.with_play(|t| t.observe(crate::time::unix_now(), offset, running));
+        for c in &changes {
+            let msg = match c {
+                crate::playtime::Change::Started(n) => format!("{n} gestartet – Game Mode an"),
+                crate::playtime::Change::Stopped { name, secs } => {
+                    format!("{name} beendet nach {} – Game Mode aus", crate::playtime::duration_de(*secs))
+                }
+            };
+            self.log_system("game", &msg);
+        }
+        changes
+    }
+
+    /// Ein Spiel wurde gestartet: Regeln mit Auslöser "Spielstart" ausführen.
+    pub fn on_game_started(&self, name: &str) -> Vec<String> {
+        let memory = crate::memory::Memory::load(&self.data_dir());
+        let rules: Vec<_> = memory
+            .rules
+            .into_iter()
+            .filter(|r| matches!(&r.when, crate::memory::Trigger::GameStart { game } if game.as_deref().is_none_or(|g| g == name)))
+            .collect();
+        rules.iter().flat_map(|r| self.run_rule(r)).collect()
+    }
+
+    /// Schritte einer Regel ausführen (Quelle "regel": nur Stufe 1, jede einzeln protokolliert).
+    fn run_rule(&self, rule: &crate::memory::Rule) -> Vec<String> {
+        let mut texts = Vec::new();
+        for step in &rule.steps {
+            let id = self.next_id();
+            let msg = self.run(&id, &step.action, step.params.clone(), Source::Rule, Some(rule.describe()));
+            if let ServerMessage::Reply { ok: true, text, .. } = msg {
+                texts.push(text);
+            }
+        }
+        texts
+    }
+
+    /// Läuft gerade ein Spiel (= Game Mode)?
+    pub fn current_game(&self) -> Option<crate::playtime::Running> {
+        self.play.lock().unwrap().as_ref().and_then(|t| t.current.clone())
+    }
+
+    /// Spielzeit sichern (z. B. beim Beenden von Panco).
+    pub fn flush_playtime(&self) {
+        if let Some(t) = self.play.lock().unwrap().as_mut() {
+            t.flush(crate::time::unix_now());
+        }
+    }
+
     // ---------- Eingänge ----------
 
     pub fn handle(&self, msg: ClientMessage, source: Source) -> ServerMessage {
@@ -208,7 +291,9 @@ impl Engine {
                     Source::Text => ConfirmVia::PcClick,
                     Source::Voice => ConfirmVia::Spoken,
                     // Claude kann nichts bestätigen.
-                    Source::Claude => return self.reply_fail("-", t("pc_confirm_needed", &[]), Mood::Error),
+                    Source::Claude | Source::Rule => {
+                        return self.reply_fail("-", t("pc_confirm_needed", &[]), Mood::Error)
+                    }
                 };
                 self.confirm(Some(&confirm_id), accept, via)
             }
@@ -223,6 +308,13 @@ impl Engine {
         }
         let norm = normalize::command(text);
 
+        // "Ja, und frag die nächsten 10 Minuten nicht mehr"
+        if self.pending.lock().unwrap().is_some() && !source.is_indirect() && parser::wants_quiet(&norm) {
+            self.set_quiet(10);
+            let via = if source.is_remote() { ConfirmVia::Remote } else { ConfirmVia::Spoken };
+            return self.confirm(None, true, via);
+        }
+
         // Antwort auf eine offene Frage?
         if let Some(accept) = parser::yes_no(&norm) {
             if self.pending.lock().unwrap().is_some() {
@@ -232,6 +324,12 @@ impl Engine {
             if accept {
                 return self.reply_fail(id, t("nothing_to_confirm", &[]), Mood::Confused);
             }
+        }
+
+        // Eigener Befehl? ("Panco, Feierabend")
+        if let Some(m) = crate::memory::Macros::load(&self.data_dir()).find(&norm) {
+            let name = m.name.clone();
+            return self.run(id, "macro.run", serde_json::json!({ "name": name }), source, Some(text.to_string()));
         }
 
         let intent = match source {
@@ -319,7 +417,27 @@ impl Engine {
 
     // ---------- Kern ----------
 
-    fn run(&self, id: &str, action: &str, params: Value, source: Source, text: Option<String>) -> ServerMessage {
+    fn run(&self, id: &str, action: &str, mut params: Value, source: Source, text: Option<String>) -> ServerMessage {
+        // "Frag mich 10 Minuten nicht mehr" / "Frag wieder nach" (nur direkt am PC)
+        if action == "panco.quiet" {
+            if source.is_indirect() || source == Source::Rule {
+                return self.reply_fail(id, t("pc_confirm_needed", &[]), Mood::Error);
+            }
+            let minutes = params.get("minutes").and_then(Value::as_u64).unwrap_or(10).min(120);
+            self.set_quiet(minutes);
+            let text = if minutes == 0 { t("quiet_off", &[]) } else { t("quiet_on", &[("min", &minutes.to_string())]) };
+            self.log_plain(&source, text.as_str().into(), "done", &text);
+            return ServerMessage::reply(id, true, text, Mood::Info, None);
+        }
+        // "nochmal": die letzte erfolgreiche Aktion wiederholen (mit denselben Regeln wie beim ersten Mal).
+        if action == "panco.repeat" {
+            let last = self.last.lock().unwrap().clone();
+            return match last {
+                Some((a, p)) => self.run(id, &a, p, source, text),
+                None => self.reply_fail(id, t("repeat_nothing", &[]), Mood::Confused),
+            };
+        }
+        self.fill_pronouns(&mut params);
         let mut meta = Meta { request_id: id.into(), source, text, action: action.into(), params, tier: 1 };
         let Some(spec) = catalog::get(action) else {
             self.log_meta(&meta, "denied", "nicht in der Whitelist", None, None);
@@ -360,13 +478,23 @@ impl Engine {
             Ok(Plan::Ready { tier, what, job }) => {
                 let tier = tier.max(spec.tier);
                 meta.tier = tier as u8;
+                if tier != Tier::Instant && meta.source == Source::Rule {
+                    self.log_meta(&meta, "denied", "Regeln dürfen nur Stufe 1", None, None);
+                    return self.reply_fail(id, t("rule_only_instant", &[]), Mood::Error);
+                }
                 if tier == Tier::PcOnly && meta.source.is_remote() {
                     self.log_meta(&meta, "denied", "Stufe 3 remote gesperrt", None, None);
                     return self.reply_fail(id, t("remote_forbidden", &[]), Mood::Error);
                 }
-                if tier == Tier::Instant {
+                // Ohne Rückfrage: Stufe 1 immer; Stufe 2 nur direkt am PC, wenn so eingestellt oder
+                // gerade "nicht mehr fragen" gilt. Stufe 3, iPhone, Claude und Regeln fragen immer.
+                let at_pc = matches!(meta.source, Source::Text | Source::Voice);
+                let skip = tier == Tier::Confirm
+                    && at_pc
+                    && (self.quiet() || self.config.read().unwrap().skip_confirm.iter().any(|a| a == action));
+                if tier == Tier::Instant || skip {
                     let result = job(self.platform.as_ref());
-                    return self.finish(meta, result, "done");
+                    return self.finish(meta, result, if skip { "done_unasked" } else { "done" });
                 }
                 let pc_only = tier == Tier::PcOnly || meta.source.is_indirect();
                 let question = t(if pc_only { "confirm_ask_pc" } else { "confirm_ask" }, &[("what", &what)]);
@@ -387,6 +515,8 @@ impl Engine {
     fn prepare(&self, handler: &dyn Action, params: &Value, source: &Source) -> Result<Plan, ActionError> {
         let games = self.games();
         let places = self.places();
+        self.with_play(|_| ()); // Spielzeit laden, bevor die Konfiguration gesperrt wird
+        let play = self.play.lock().unwrap();
         let config = self.config.read().unwrap();
         let ctx = Ctx {
             platform: self.platform.as_ref(),
@@ -396,13 +526,73 @@ impl Engine {
             places: &places,
             log: &self.log,
             now: crate::time::unix_now(),
+            play: play.as_ref(),
         };
         handler.prepare(params, &ctx)
     }
 
+    /// Rückfragen (Stufe 2, nur am PC) für `minutes` Minuten aussetzen; 0 = wieder fragen.
+    pub fn set_quiet(&self, minutes: u64) {
+        *self.quiet_until.lock().unwrap() = (minutes > 0).then(|| Instant::now() + Duration::from_secs(minutes * 60));
+    }
+
+    /// Restzeit von "nicht mehr fragen" in Sekunden (0 = aus).
+    pub fn quiet_secs(&self) -> u64 {
+        self.quiet_until.lock().unwrap().map_or(0, |u| u.saturating_duration_since(Instant::now()).as_secs())
+    }
+
+    fn quiet(&self) -> bool {
+        self.quiet_secs() > 0
+    }
+
+    /// "schließ es", "öffne das": Fürwort durch das letzte Ziel ersetzen.
+    fn fill_pronouns(&self, params: &mut Value) {
+        const PRONOUNS: [&str; 7] = ["es", "das", "ihn", "sie", "den", "die", "dieses"];
+        let Some(obj) = params.as_object_mut() else { return };
+        for key in ["target", "app"] {
+            let is_pronoun = obj
+                .get(key)
+                .and_then(Value::as_str)
+                .is_some_and(|v| PRONOUNS.contains(&v.trim().to_lowercase().as_str()));
+            if is_pronoun {
+                if let Some(last) = self.last_target() {
+                    obj.insert(key.into(), Value::String(last));
+                }
+            }
+        }
+    }
+
+    fn last_target(&self) -> Option<String> {
+        let last = self.last.lock().unwrap();
+        let (_, p) = last.as_ref()?;
+        ["target", "app"].iter().find_map(|k| p.get(*k).and_then(Value::as_str).map(str::to_string))
+    }
+
     fn finish(&self, m: Meta, result: Result<Done, ActionError>, ok_outcome: &str) -> ServerMessage {
         match result {
-            Ok(done) => {
+            Ok(mut done) => {
+                // Für "nochmal"/"schließ es" merken (nur echte Aktionen, keine Auskünfte)
+                const NOT_REPEATABLE: [&str; 6] =
+                    ["panco.undo", "panco.help", "info.time", "info.playtime", "memory.list", "memory.forget"];
+                if !NOT_REPEATABLE.contains(&m.action.as_str()) && !m.action.starts_with("macro.c") {
+                    *self.last.lock().unwrap() = Some((m.action.clone(), m.params.clone()));
+                }
+                // Regeln "Wenn ich X starte, …" (Regeln lösen keine Regeln aus – keine Schleifen)
+                if m.action == "app.launch" && m.source != Source::Rule {
+                    let target =
+                        m.params.get("target").and_then(Value::as_str).map(normalize::name).unwrap_or_default();
+                    let memory = crate::memory::Memory::load(&self.data_dir());
+                    for rule in memory
+                        .rules
+                        .iter()
+                        .filter(|r| matches!(&r.when, crate::memory::Trigger::AppStart { target: t } if *t == target))
+                    {
+                        let ran = self.run_rule(rule);
+                        if !ran.is_empty() {
+                            done.text = format!("{} {}", done.text, t("rule_ran", &[("text", &ran.join(" "))]));
+                        }
+                    }
+                }
                 self.log_meta(&m, ok_outcome, &done.text, done.undo.clone(), done.undo_of.clone());
                 ServerMessage::reply(&m.request_id, true, short(&done.text), done.mood, Some(&m.action))
                     .with_choices(done.choices)
@@ -468,7 +658,12 @@ impl Engine {
             self.log_system("trash_purged", &msg);
             report.push(msg);
         }
-        if files.backup_enabled && (force_backup || crate::backup::due(&places.backup, now)) {
+        // Während eines Spiels kein Backup (Festplatte schonen) – es folgt nach dem Spiel.
+        let gaming = self.current_game().is_some();
+        if gaming && !force_backup && files.backup_enabled && crate::backup::due(&places.backup, now) {
+            report.push("Backup wartet bis nach dem Spiel".into());
+        }
+        if files.backup_enabled && (force_backup || (!gaming && crate::backup::due(&places.backup, now))) {
             match crate::backup::run(&places, now, self.platform.utc_offset_secs(), files.backup_keep) {
                 Ok(b) => {
                     let msg = format!("Backup {} angelegt", b.name);

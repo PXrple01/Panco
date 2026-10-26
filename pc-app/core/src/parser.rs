@@ -49,6 +49,46 @@ fn cap<'a>(c: &'a Captures, i: usize) -> &'a str {
 }
 
 const PC: &str = r"(?:den |die |das )?(?:pc|computer|rechner|kiste|laptop)";
+/// Programmname (1–2 Wörter) für Lautstärke pro App.
+const APP: &str = r"([a-zäöüß0-9][a-zäöüß0-9.\-]*(?: [a-zäöüß0-9.\-]+)??)";
+
+/// Wörter, die kein Programm sind ("mach es leiser" ist die Gesamtlautstärke).
+fn app_name(raw: &str) -> Option<String> {
+    let t = target(raw);
+    let no = [
+        "es",
+        "das",
+        "ton",
+        "alles",
+        "lautstärke",
+        "lautstärk",
+        "volume",
+        "sound",
+        "musik",
+        "die musik",
+        "den ton",
+        "mich",
+        "dich",
+        "etwas",
+        "viel",
+        "bisschen",
+        "ein bisschen",
+        "deutlich",
+        "ganz",
+        "wieder",
+        "",
+    ];
+    (!no.contains(&t.as_str()) && !t.starts_with("lautstärke")).then_some(t)
+}
+
+fn app_step(word: &str) -> i64 {
+    match word {
+        "viel" | "deutlich" => 25,
+        "" => 15,
+        _ => 8,
+    }
+}
+
 const UNDO: &str = r"r(?:ü|u|ö|ue|oe)ckg(?:ä|a|ae)ngig";
 
 static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
@@ -109,6 +149,104 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         rule(
             r"^(?:(?:lies|lese|les|läs|lees)(?: mir)?(?: vor)? was (?:im|in dem|auf dem|in meinem|am|da im) (?:editor|fenster|bildschirm|screen|monitor|browser|chat)|was steht (?:da|hier|im|in dem|auf dem) (?:editor|fenster|bildschirm|screen|monitor|browser|chat)?)\b.*$",
             |_| intent("panco.help", json!({"topic": "screen"})),
+        ),
+        // --- Gedächtnis zeigen, wiederholen ---
+        rule(
+            r"^(?:was weißt du(?: alles)?(?: über mich| von mir)?|was hast du dir (?:alles )?gemerkt|was merkst du dir|zeig(?:e)? (?:mir )?(?:dein|das) gedächtnis|welche (?:befehle|regeln) (?:hast du|habe ich|kennst du|gibt es))$",
+            |_| intent("memory.list", json!({})),
+        ),
+        rule(
+            r"^(?:frag(?:e)? (?:mich )?(?:die nächsten |für )?(\S+) minuten nicht(?: mehr)?(?: nach)?|keine rückfragen(?: für| die nächsten)? (\S+) minuten)$",
+            |c| {
+                let n = normalize::number(if c.get(1).is_some() { cap(c, 1) } else { cap(c, 2) })?;
+                intent("panco.quiet", json!({"minutes": n.min(120)}))
+            },
+        ),
+        rule(r"^(?:frag(?:e)? (?:mich )?(?:wieder|ab jetzt wieder)(?: nach)?|rückfragen (?:wieder )?an)$", |_| {
+            intent("panco.quiet", json!({"minutes": 0}))
+        }),
+        rule(
+            r"^(?:nochmal|noch mal|noch einmal|nochmal bitte|wiederhol(?:e)?(?: das)?|mach das (?:nochmal|noch mal|noch einmal)|das gleiche (?:nochmal|noch mal))$",
+            |_| intent("panco.repeat", json!({})),
+        ),
+        // --- Spotify (Web-API, optional) ---
+        rule(
+            r"^(?:was (?:für ein (?:lied|song)(?: läuft| ist das)?|läuft)(?: gerade| grad)?(?: (?:auf|bei) spotify)?|welches lied (?:ist das|läuft(?: gerade)?)|wie heißt (?:das|dieses) lied)$",
+            |_| intent("spotify.now", json!({})),
+        ),
+        rule(
+            r"^(?:spiel|spiele|spielt|play|mach) (?:mir )?(?:(?:die )?(playlist)|(?:das )?(album)|(?:musik|lieder|songs) von|(?:den )?(?:song|titel|track)|das lied)? ?(.+?) (?:auf|bei|in|über|mit) spotify(?: ab| an)?$|^spotify (?:spiel|spiele|play) (?:mir )?(.+)$",
+            |c| {
+                let query = if c.get(3).is_some() { cap(c, 3) } else { cap(c, 4) };
+                let text = c.get(0).map_or("", |m| m.as_str());
+                let kind = if c.get(1).is_some() {
+                    "playlist"
+                } else if c.get(2).is_some() {
+                    "album"
+                } else if text.contains(" von ") && !text.contains("song") && !text.contains("lied ") {
+                    "artist"
+                } else {
+                    "track"
+                };
+                intent("spotify.play", json!({"query": query.trim(), "kind": kind}))
+            },
+        ),
+        // --- Spielzeit ---
+        rule(
+            r"^(?:was|welches spiel) (?:spiele|zocke|spiel) ich (?:gerade|grad|da)?$|^läuft (?:gerade )?(?:ein|irgendein) spiel$",
+            |_| intent("info.playtime", json!({"period": "now"})),
+        ),
+        rule(
+            r"^(?:wie (?:lange|viel)|wieviel) (?:habe|hab) ich (heute|diese woche|die woche|in dieser woche|insgesamt|überhaupt) (?:schon )?(?:gespielt|gezockt)$|^(?:meine )?spielzeit(?: (heute|diese woche|insgesamt))?$",
+            |c| {
+                let when = if c.get(1).is_some() { cap(c, 1) } else { cap(c, 2) };
+                let period = match when {
+                    "heute" | "" => "today",
+                    "insgesamt" | "überhaupt" => "total",
+                    _ => "week",
+                };
+                intent("info.playtime", json!({"period": period}))
+            },
+        ),
+        rule(
+            r"^(?:wie (?:lange|viel)|wieviel) (?:habe|hab) ich (?:schon |insgesamt )?(.+?) (?:gespielt|gezockt)$",
+            |c| intent("info.playtime", json!({"period": "total", "game": target(cap(c, 1))})),
+        ),
+        // --- Lautstärke pro App (vor der Gesamtlautstärke) ---
+        rule(
+            &format!(
+                r"^(?:(?:mach|mache|dreh|drehe|stell|stelle) )?(?:(?:den ton|die lautstärke) von )?{APP} (?:(viel|deutlich|etwas|ein bisschen|ein wenig|bisschen) )?(lauter|leiser)(?: machen| drehen| stellen)?$"
+            ),
+            |c| {
+                let step = app_step(cap(c, 2));
+                let delta = if cap(c, 3) == "lauter" { step } else { -step };
+                intent("volume.app", json!({"app": app_name(cap(c, 1))?, "delta": delta}))
+            },
+        ),
+        rule(
+            &format!(
+                r"^(?:(?:stell|stelle|mach|mache|setz|setze|dreh|drehe) )?(?:(?:den ton|die lautstärke) von )?{APP}(?: lautstärke)? (?:auf|zu) (\S+)(?: prozent| %)?$"
+            ),
+            |c| {
+                let n = normalize::number(cap(c, 2))?;
+                (n <= 100).then_some(())?;
+                intent("volume.app", json!({"app": app_name(cap(c, 1))?, "level": n}))
+            },
+        ),
+        rule(
+            &format!(
+                r"^(?:(?:mach|mache|schalt|schalte) )?{APP} (?:stumm|lautlos)(?: schalten| machen)?$|^(?:mute|stummschalten) {APP}$"
+            ),
+            |c| {
+                let app = if c.get(1).is_some() { cap(c, 1) } else { cap(c, 2) };
+                intent("volume.app", json!({"app": app_name(app)?, "mute": true}))
+            },
+        ),
+        rule(
+            &format!(
+                r"^(?:(?:mach|mache|schalt|schalte) )?(?:den ton von )?{APP} (?:wieder )?(?:laut|hörbar)(?: schalten| machen)?$"
+            ),
+            |c| intent("volume.app", json!({"app": app_name(cap(c, 1))?, "mute": false})),
         ),
         // --- Ton ---
         rule(r"^(?:ton aus|stumm|stummschalten|schalt(?:e)? (?:den ton |alles )?stumm|mute|lautlos)$", |_| {
@@ -224,6 +362,29 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
 static ORIGINAL_RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     const NOTE_VERB: &str = r"(?:erstell|erstelle|leg|lege|mach|mache|schreib|schreibe|notier|notiere)";
     vec![
+        // --- Gedächtnis, Regeln, eigene Befehle ---
+        // "Wenn ich Deadlock starte, starte auch Discord" / "Merk dir: wenn ich ein Spiel starte, …"
+        rule(
+            r"(?i)^(?:(?:bitte\s+)?merk(?:e)?\s+dir\s*[,:]?\s*(?:dass\s+)?)?(?:immer\s+)?wenn\s+ich\s+(.+?)\s+(?:starte|öffne|spiele|zocke|anmache|anwerfe)\s*,?\s*(?:dann\s+)?(.+)$",
+            |c| intent("memory.rule", json!({"when": cap(c, 1).trim(), "then": cap(c, 2).trim()})),
+        ),
+        rule(r"(?i)^(?:bitte\s+)?merk(?:e)?\s+dir(?:\s+bitte)?\s*[,:]?\s*(?:dass\s+)?(.+)$", |c| {
+            intent("memory.remember", json!({"text": cap(c, 1).trim()}))
+        }),
+        rule(r"(?i)^vergiss\s+(?:bitte\s+)?alles$", |_| intent("memory.forget", json!({"all": true}))),
+        rule(
+            r"(?i)^vergiss(?:\s+bitte)?(?:\s*,?\s*dass|\s+das\s+mit|\s+die\s+regel|\s+den\s+merksatz)?\s+(.+)$",
+            |c| intent("memory.forget", json!({"text": cap(c, 1).trim()})),
+        ),
+        // "Neuer Befehl Feierabend: schließe Discord, Lautstärke 30 und sperr den PC"
+        rule(
+            r#"(?i)^(?:(?:erstell|erstelle|leg|lege|mach|mache)\s+(?:mir\s+)?(?:einen\s+)?(?:neuen\s+)?|neuer\s+|neues\s+)(?:befehl|kommando|makro)\s+(?:namens\s+|mit\s+dem\s+namen\s+)?["„]?([^:,"“]+?)["“]?(?:\s+an)?\s*[:,]\s*(.+)$"#,
+            |c| intent("macro.create", json!({"name": cap(c, 1).trim(), "steps": cap(c, 2).trim()})),
+        ),
+        rule(
+            r#"(?i)^(?:lösch|lösche|entfern|entferne)\s+(?:den\s+|meinen\s+)?(?:eigenen\s+)?(?:befehl|makro)\s+["„]?(.+?)["“]?$"#,
+            |c| intent("macro.delete", json!({"name": cap(c, 1).trim()})),
+        ),
         // "Erstelle eine neue Notiz und nenne sie Passwörter", "Neue Notiz Einkauf: Milch"
         rule(
             &format!(
@@ -413,6 +574,13 @@ pub fn answer_text(text: &str, asked: Option<&str>) -> Option<String> {
     }
 }
 
+/// "Ja, und frag die nächsten 10 Minuten nicht mehr" – Zustimmung + Rückfragen kurz aussetzen.
+pub fn wants_quiet(normalized: &str) -> bool {
+    let n = normalized;
+    (n.starts_with("ja") || n.starts_with("okay") || n.starts_with("ok"))
+        && (n.contains("nicht mehr fragen") || n.contains("frag nicht mehr") || n.contains("minuten nicht"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -467,6 +635,18 @@ mod tests {
         assert_eq!(p("mach etwas leiser"), Some(("volume.change", json!({"delta": -5}))));
         assert_eq!(p("viel lauter"), Some(("volume.change", json!({"delta": 20}))));
         assert_eq!(p("Ton aus"), Some(("volume.mute", json!({"mute": true}))));
+        // Lautstärke pro App
+        assert_eq!(p("Panco, Spotify leiser"), Some(("volume.app", json!({"app": "spotify", "delta": -15}))));
+        assert_eq!(p("mach Discord viel lauter"), Some(("volume.app", json!({"app": "discord", "delta": 25}))));
+        assert_eq!(p("stell Spotify auf 30 Prozent"), Some(("volume.app", json!({"app": "spotify", "level": 30}))));
+        assert_eq!(
+            p("die Lautstärke von Discord auf zwanzig"),
+            Some(("volume.app", json!({"app": "discord", "level": 20})))
+        );
+        assert_eq!(p("mach Discord stumm"), Some(("volume.app", json!({"app": "discord", "mute": true}))));
+        assert_eq!(p("Discord wieder laut"), Some(("volume.app", json!({"app": "discord", "mute": false}))));
+        assert_eq!(p("mach es leiser"), Some(("volume.change", json!({"delta": -10}))));
+        assert_eq!(p("die Musik leiser"), Some(("volume.change", json!({"delta": -10}))));
         assert_eq!(p("ton wieder an"), Some(("volume.mute", json!({"mute": false}))));
     }
 
@@ -550,6 +730,13 @@ mod tests {
         assert_eq!(p("mach einen Screenshot"), Some(("screen.screenshot", json!({}))));
         assert_eq!(p("mach das rückgängig"), Some(("panco.undo", json!({}))));
         assert_eq!(p("Wie viel Uhr ist es gerade?"), Some(("info.time", json!({"what": "time"}))));
+        assert_eq!(p("Wie lange habe ich heute gespielt?"), Some(("info.playtime", json!({"period": "today"}))));
+        assert_eq!(p("wie lange hab ich diese Woche gezockt"), Some(("info.playtime", json!({"period": "week"}))));
+        assert_eq!(
+            p("Wie lange habe ich schon Deadlock gespielt?"),
+            Some(("info.playtime", json!({"period": "total", "game": "deadlock"})))
+        );
+        assert_eq!(p("Was spiele ich gerade?"), Some(("info.playtime", json!({"period": "now"}))));
         assert_eq!(p("Panco, wie spät ist es?"), Some(("info.time", json!({"what": "time"}))));
         assert_eq!(p("Welcher Tag ist heute?"), Some(("info.time", json!({"what": "date"}))));
         assert_eq!(p("Was kannst du alles?"), Some(("panco.help", json!({}))));
@@ -591,6 +778,57 @@ mod tests {
         assert_eq!(p("lies meine letzte Notiz vor"), Some(("note.read", json!({}))));
         assert_eq!(p("Welche Notizen habe ich?"), Some(("note.search", json!({}))));
         assert_eq!(p("Such in meinen Notizen nach Steam"), Some(("note.search", json!({"query": "Steam"}))));
+    }
+
+    #[test]
+    fn memory_and_macros() {
+        assert_eq!(
+            p("Panco, merk dir, dass mein Lieblingsspiel Deadlock ist"),
+            Some(("memory.remember", json!({"text": "mein Lieblingsspiel Deadlock ist"})))
+        );
+        assert_eq!(
+            p("Wenn ich Deadlock starte, starte auch Discord."),
+            Some(("memory.rule", json!({"when": "Deadlock", "then": "starte auch Discord"})))
+        );
+        assert_eq!(
+            p("Merk dir: wenn ich ein Spiel starte, stell Spotify auf 20 Prozent"),
+            Some(("memory.rule", json!({"when": "ein Spiel", "then": "stell Spotify auf 20 Prozent"})))
+        );
+        assert_eq!(p("Was weißt du über mich?"), Some(("memory.list", json!({}))));
+        assert_eq!(p("Vergiss alles"), Some(("memory.forget", json!({"all": true}))));
+        assert_eq!(p("Vergiss das mit Discord"), Some(("memory.forget", json!({"text": "Discord"}))));
+        assert_eq!(
+            p("Neuer Befehl Feierabend: schließe Discord, Lautstärke 30 und sperr den PC"),
+            Some((
+                "macro.create",
+                json!({"name": "Feierabend", "steps": "schließe Discord, Lautstärke 30 und sperr den PC"})
+            ))
+        );
+        assert_eq!(
+            p("Erstelle einen Befehl „Zocken“: starte Discord und Spotify leiser"),
+            Some(("macro.create", json!({"name": "Zocken", "steps": "starte Discord und Spotify leiser"})))
+        );
+        assert_eq!(p("Lösche den Befehl Feierabend"), Some(("macro.delete", json!({"name": "Feierabend"}))));
+        assert_eq!(p("nochmal"), Some(("panco.repeat", json!({}))));
+        assert_eq!(
+            p("Spiel Lo-Fi Beats auf Spotify"),
+            Some(("spotify.play", json!({"query": "lo fi beats", "kind": "track"})))
+        );
+        assert_eq!(
+            p("spiel die Playlist Gaming Mix auf Spotify"),
+            Some(("spotify.play", json!({"query": "gaming mix", "kind": "playlist"})))
+        );
+        assert_eq!(
+            p("spiel Musik von Daft Punk auf Spotify"),
+            Some(("spotify.play", json!({"query": "daft punk", "kind": "artist"})))
+        );
+        assert_eq!(p("Was läuft gerade?"), Some(("spotify.now", json!({}))));
+        assert_eq!(p("was für ein Lied läuft gerade auf Spotify"), Some(("spotify.now", json!({}))));
+        assert_eq!(p("spiel deadlock"), Some(("app.launch", json!({"target": "deadlock"}))));
+        assert_eq!(p("Frag mich 10 Minuten nicht mehr"), Some(("panco.quiet", json!({"minutes": 10}))));
+        assert_eq!(p("frag wieder nach"), Some(("panco.quiet", json!({"minutes": 0}))));
+        assert!(wants_quiet(&normalize::command("Ja, und frag die nächsten 10 Minuten nicht mehr")));
+        assert!(!wants_quiet("ja"));
     }
 
     #[test]

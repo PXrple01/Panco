@@ -14,16 +14,23 @@ pub struct Config {
     pub files: FileSettings,
     pub setup: SetupSettings,
     pub system: SystemSettings,
+    /// Spotify Web-API (optional): eigene Client-ID aus dem Spotify-Entwicklerportal. Leer = aus.
+    pub spotify_client_id: String,
     /// Programme, Webseiten und URIs, die Panco per Name öffnen darf.
     pub apps: Vec<AppAlias>,
     /// Kurznamen für Spiele, z. B. "cs" → "Counter-Strike 2".
     pub game_aliases: BTreeMap<String, String>,
+    /// Spiele außerhalb von Steam, erkannt am Exe-Namen (Prozessliste alle 12 s): Exe → Name.
+    pub game_processes: BTreeMap<String, String>,
     /// Steam-Ordner; leer = automatisch (Registry) finden.
     pub steam_path: Option<String>,
     /// Such-URL, `{q}` wird durch die Suchanfrage ersetzt.
     pub search_url: String,
     /// Wie lange eine Bestätigungsfrage gültig ist.
     pub confirm_timeout_secs: u64,
+    /// Aktionen der Stufe 2, die ohne Rückfrage laufen – nur für Befehle direkt am PC
+    /// (getippt/gesprochen), nie für iPhone, Claude oder Regeln. Stufe 3 fragt immer.
+    pub skip_confirm: Vec<String>,
 }
 
 /// Start mit Windows und Absturz-Wächter.
@@ -265,6 +272,18 @@ impl Default for Config {
             files: FileSettings::default(),
             setup: SetupSettings::default(),
             system: SystemSettings::default(),
+            skip_confirm: Vec::new(),
+            spotify_client_id: String::new(),
+            game_processes: [
+                ("VALORANT-Win64-Shipping.exe", "Valorant"),
+                ("League of Legends.exe", "League of Legends"),
+                ("FortniteClient-Win64-Shipping.exe", "Fortnite"),
+                ("RobloxPlayerBeta.exe", "Roblox"),
+                ("Minecraft.Windows.exe", "Minecraft"),
+            ]
+            .into_iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect(),
             apps: vec![
                 app(&["discord"], "discord://", &[], Some("Discord.exe")),
                 app(&["spotify"], "spotify:", &[], Some("Spotify.exe")),

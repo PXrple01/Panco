@@ -6,14 +6,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod autostart;
+mod brain;
 mod crash;
 mod data;
+mod games;
 mod hotkeys;
 mod ipc;
 mod maintenance;
 mod overlay;
 mod settings;
 mod setup;
+mod spotify;
 mod system;
 mod tray;
 mod voice;
@@ -125,6 +128,17 @@ fn main() {
             settings::train_start,
             settings::train_cancel,
             system::system_status,
+            brain::brain_state,
+            brain::macro_save,
+            brain::macro_remove,
+            brain::macro_try,
+            brain::fact_add,
+            brain::memory_remove,
+            brain::set_skip_confirm,
+            brain::set_quiet,
+            spotify::spotify_status,
+            spotify::spotify_connect,
+            spotify::spotify_disconnect,
             system::set_system,
             setup::setup_state,
             setup::setup_save,
@@ -148,6 +162,7 @@ fn main() {
             tray::create(app.handle())?;
             hotkeys::register_all(app.handle());
             maintenance::start(app.handle());
+            games::start(app.handle());
             // Autostart-Eintrag aktuell halten (zeigt immer auf diese panco.exe).
             if let Err(e) = autostart::sync(autostart) {
                 crash::note(&format!("Autostart nicht einstellbar: {e}"));

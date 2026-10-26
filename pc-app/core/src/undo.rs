@@ -35,6 +35,17 @@ pub enum UndoOp {
     Mute {
         muted: bool,
     },
+    /// Merksatz, Regel oder eigenen Befehl wieder entfernen.
+    MemoryRemove {
+        file: PathBuf,
+        id: String,
+    },
+    /// Lautstärke eines Programms zurücksetzen.
+    AppVolume {
+        process: String,
+        level: u8,
+        muted: bool,
+    },
 }
 
 fn file_name(p: &std::path::Path) -> String {
@@ -61,6 +72,10 @@ impl UndoOp {
             UndoOp::Truncate { path, .. } => format!("Ergänzung in {} entfernen", file_name(path)),
             UndoOp::Volume { level } => format!("Lautstärke zurück auf {level}"),
             UndoOp::Mute { muted } => (if *muted { "wieder stumm schalten" } else { "Ton wieder an" }).into(),
+            UndoOp::MemoryRemove { .. } => "wieder vergessen".into(),
+            UndoOp::AppVolume { process, level, .. } => {
+                format!("{} zurück auf {level}", process.trim_end_matches(".exe"))
+            }
         }
     }
 
@@ -96,6 +111,24 @@ impl UndoOp {
             UndoOp::Mute { muted } => {
                 pf.set_muted(*muted).map_err(|e| e.to_string())?;
                 Ok(if *muted { "Wieder stumm." } else { "Ton wieder an." }.into())
+            }
+            UndoOp::MemoryRemove { file, id } => {
+                let dir = file.parent().ok_or("kein Datenordner")?;
+                if file.file_name().is_some_and(|n| n == "befehle.json") {
+                    let mut m = crate::memory::Macros::load(dir);
+                    m.list.retain(|x| &x.id != id);
+                    m.save(dir)?;
+                } else {
+                    let mut m = crate::memory::Memory::load(dir);
+                    m.facts.retain(|x| &x.id != id);
+                    m.rules.retain(|x| &x.id != id);
+                    m.save(dir)?;
+                }
+                Ok("Wieder vergessen.".into())
+            }
+            UndoOp::AppVolume { process, level, muted } => {
+                pf.set_app_volume(process, Some(*level), Some(*muted)).map_err(|e| e.to_string())?;
+                Ok(format!("{} wieder bei {level} %.", process.trim_end_matches(".exe")))
             }
         }
     }

@@ -69,6 +69,7 @@ interface Status {
   models: { id: string; label: string; installed: boolean }[];
   voice: VoiceSettings;
   games: number;
+  game: { name: string; since: number } | null;
   config_path: string;
   hotkeys: { overlay: string; kill_switch: string; push_to_talk: string; mic_mute: string };
 }
@@ -193,6 +194,9 @@ function render(s: Status) {
     : s.models.some((m) => m.installed)
       ? "nicht geladen (0 MB)"
       : "kein Modell installiert – unten herunterladen";
+  $("s-game").textContent = s.game
+    ? `${s.game.name} · Game Mode seit ${Math.max(1, Math.round((Date.now() / 1000 - s.game.since) / 60))} Min. (Avatar schläft, Backups warten)`
+    : "kein Spiel erkannt";
   $("s-last").textContent = s.last
     ? `„${s.last.text}“ · ${s.last.engine} · Audio ${fmt(s.last.audio_ms / 1000)} s · Laden ${s.last.load_ms} ms · Erkennung ${s.last.stt_ms} ms`
     : "–";

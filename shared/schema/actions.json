@@ -550,6 +550,260 @@
           }
         }
       }
+    },
+    {
+      "id": "volume.app",
+      "tier": 1,
+      "remote": true,
+      "title": "Lautstärke einer App",
+      "description": "Lautstärke eines einzelnen Programms im Windows-Lautstärkemixer (z. B. Spotify, Discord, ein Spiel): genau eins von level (0–100), delta (-100–100) oder mute.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "app"
+        ],
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "level": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "delta": {
+            "type": "integer",
+            "minimum": -100,
+            "maximum": 100
+          },
+          "mute": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "id": "info.playtime",
+      "tier": 1,
+      "remote": true,
+      "title": "Spielzeit",
+      "description": "Sagt, welches Spiel gerade läuft (period=now) oder wie lange gespielt wurde: heute, diese Woche, insgesamt; optional für ein bestimmtes Spiel.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "period"
+        ],
+        "properties": {
+          "period": {
+            "enum": [
+              "now",
+              "today",
+              "week",
+              "total"
+            ]
+          },
+          "game": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        }
+      }
+    },
+    {
+      "id": "memory.remember",
+      "tier": 1,
+      "remote": true,
+      "title": "Merken",
+      "description": "Merkt sich einen Satz über den Nutzer oder seine Vorlieben (z. B. „Mein Lieblingsspiel ist Deadlock“). Keine Passwörter.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    },
+    {
+      "id": "memory.list",
+      "tier": 1,
+      "remote": true,
+      "title": "Gedächtnis zeigen",
+      "description": "Sagt, was Panco sich gemerkt hat: Merksätze, Regeln und eigene Befehle.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
+    },
+    {
+      "id": "memory.forget",
+      "tier": 1,
+      "remote": true,
+      "title": "Vergessen",
+      "description": "Vergisst einen Merksatz oder eine Regel (text) oder alles (all=true, mit Rückfrage). Rückgängig machbar.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "all": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "id": "memory.rule",
+      "tier": 1,
+      "remote": true,
+      "title": "Regel",
+      "description": "Vorliebe als Regel: Wenn `when` startet (Spiel, Programm oder „ein Spiel“), führt Panco die Befehle in `then` aus – nur Befehle ohne Rückfrage.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "when": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "then": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "when",
+          "then"
+        ]
+      }
+    },
+    {
+      "id": "macro.create",
+      "tier": 1,
+      "remote": false,
+      "title": "Eigenen Befehl anlegen",
+      "description": "Legt einen eigenen Befehl an: `name` löst die Schritte in `steps` aus (normale Panco-Befehle, mit Komma getrennt).",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "steps": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "name",
+          "steps"
+        ]
+      }
+    },
+    {
+      "id": "macro.run",
+      "tier": 1,
+      "remote": true,
+      "title": "Eigenen Befehl ausführen",
+      "description": "Führt einen eigenen Befehl aus. Er hat die höchste Stufe seiner Schritte; braucht einer eine Bestätigung, werden alle Schritte einmal gezeigt.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "id": "macro.delete",
+      "tier": 1,
+      "remote": false,
+      "title": "Eigenen Befehl löschen",
+      "description": "Löscht einen eigenen Befehl (rückgängig machbar).",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "id": "spotify.play",
+      "tier": 1,
+      "remote": true,
+      "title": "Auf Spotify abspielen",
+      "description": "Sucht auf Spotify und spielt das Ergebnis auf dem aktiven Gerät ab (Spotify Premium nötig, Spotify muss verbunden sein). kind: track (Standard), playlist, artist, album.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "kind": {
+            "enum": [
+              "track",
+              "playlist",
+              "artist",
+              "album"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "spotify.now",
+      "tier": 1,
+      "remote": true,
+      "title": "Was läuft auf Spotify",
+      "description": "Sagt, welcher Titel gerade auf Spotify läuft.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
     }
   ]
 }

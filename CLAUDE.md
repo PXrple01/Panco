@@ -155,7 +155,7 @@ Windows (`tools/measure.ps1`); Werte aus der Linux-Entwicklungsumgebung klar als
    Stufe-2-Dateiaktionen, Notizen (verschlüsselt), Aktionsprotokoll mit Rückgängig, Backups
 5. ✅ **Zuverlässigkeit & Aktivierungs-Schutz:** Autostart + Wächter, Wake-Word-Sicherheit, Systemton-Abgleich,
    optionale Sprecherprüfung
-6. **Spiele, Medien, Gedächtnis & Makros:** Spiel-Erkennung + Game Mode + Spielzeit, Lautstärke pro App,
+6. ✅ **Spiele, Medien, Gedächtnis & Makros:** Spiel-Erkennung + Game Mode + Spielzeit, Lautstärke pro App,
    Spotify (optional Web-API), Kontext-Gedächtnis/Vorlieben-Regeln, eigene Befehle per Sprache (Einstellungsreiter),
    Rückfragen pro Aktion abschaltbar
 7. **Claude-Assistent:** Tool Use mit Stufen, Streaming, Bildschirm/Fenster/Code lesen auf Anfrage (lokale OCR zuerst),
@@ -172,4 +172,4 @@ Windows (`tools/measure.ps1`); Werte aus der Linux-Entwicklungsumgebung klar als
 14. **Abschluss:** README, Befehlsliste, Sicherheitskonzept, Messwerte
 
 Nach jeder Etappe committen (verständliche Nachricht) und Messwerte zeigen.
-Stand: Etappen 1–5 erledigt, als Nächstes Etappe 6.
+Stand: Etappen 1–6 erledigt, als Nächstes Etappe 7.

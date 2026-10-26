@@ -15,6 +15,8 @@ interface UiSettings {
   state: State;
   /** Mini-Panco (per "Panco, …" geöffnet): kleines Icon + erkannter Text, keine Eingabezeile. */
   compact: boolean;
+  /** Game Mode: Avatar schläft, keine Animationen. */
+  game_mode: boolean;
   /** Antwort und erkannter Text, die eintrafen, während das Overlay noch lud. */
   pending: ServerMessage | null;
   heard: string | null;
@@ -264,10 +266,13 @@ const listening = Promise.all([
   await listening;
   const ui = await invoke<UiSettings>("ui_settings");
   settings = ui;
-  document.documentElement.classList.toggle("reduce-motion", settings.reduce_motion);
-  if (settings.show_avatar) avatar = new PancoAvatar(avatarHost, { reduced: settings.reduce_motion });
+  // Im Spiel: keine Animationen, Panda schläft (spart GPU/CPU).
+  const calm = settings.reduce_motion || ui.game_mode;
+  document.documentElement.classList.toggle("reduce-motion", calm);
+  if (settings.show_avatar) avatar = new PancoAvatar(avatarHost, { reduced: calm });
   else avatarHost.classList.add("is-off");
-  wake();
+  if (ui.game_mode) avatar?.setResting(true);
+  else wake();
   setMini(ui.compact);
   showState(ui.state);
   if (ui.heard) showHeard(ui.heard);

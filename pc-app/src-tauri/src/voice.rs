@@ -97,6 +97,8 @@ fn build_config(app: &AppHandle, muted: bool) -> VoiceConfig {
 fn whisper_prompt(engine: &Engine) -> String {
     let mut names: Vec<String> = engine.games().into_iter().map(|g| g.name).collect();
     names.extend(engine.config().apps.iter().filter_map(|a| a.names.first().cloned()));
+    // Eigene Befehle ("Feierabend") – sonst versteht Whisper erfundene Namen schlecht.
+    names.extend(panco_core::memory::Macros::load(&engine.data_dir()).list.into_iter().map(|m| m.name));
     // Titel normaler Notizen (bleibt lokal); sensible Titel nie.
     names.extend(panco_core::notes::list(&engine.places().notes).into_iter().filter(|n| !n.sensitive).map(|n| n.title));
     let mut list = String::new();
@@ -110,7 +112,8 @@ fn whisper_prompt(engine: &Engine) -> String {
     format!(
         "Panco, öffne Deadlock. Starte Discord. Lautstärke auf 30 Prozent. Nächstes Lied. Such Build Guides. \
          Finde meine letzte Rechnung. Neue Notiz Einkauf: Milch. Lies die Notiz vor. Lösche die Datei. \
-         Mach das rückgängig. Wie spät ist es? Was kannst du? Fahr den PC herunter. Ja. Nein. {}",
+         Mach das rückgängig. Wie spät ist es? Was kannst du? Spotify leiser. Discord stumm. Merk dir. \
+         Wie lange habe ich heute gespielt? Spiel Lo-Fi auf Spotify. Was läuft gerade? Nochmal. Fahr den PC herunter. Ja. Nein. {}",
         list.trim_end_matches(", ")
     )
 }

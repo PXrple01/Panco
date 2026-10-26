@@ -26,6 +26,8 @@ pub struct UiSettings {
     enabled: bool,
     /// Mini-Panco (per Sprache geöffnet) statt voller Karte
     compact: bool,
+    /// Game Mode: Avatar schläft, keine Animation
+    game_mode: bool,
     /// Aktueller Avatar-/Mikrofonzustand (das Overlay wird oft erst nach einem Ereignis erzeugt).
     state: ServerMessage,
     /// Antwort/Rückfrage und erkannter Text, die eintrafen, während das Overlay noch lud.
@@ -44,6 +46,7 @@ pub fn ui_settings(app: AppHandle) -> UiSettings {
         auto_hide_ms: o.auto_hide_ms,
         enabled: engine.enabled(),
         compact: overlay::is_compact(),
+        game_mode: engine.current_game().is_some(),
         state: crate::state_message(&app),
         pending,
         heard,

@@ -69,6 +69,37 @@ impl Platform for OtherPlatform {
     fn utc_offset_secs(&self) -> i32 {
         0
     }
+    fn app_volumes(&self) -> PResult<Vec<AppVolume>> {
+        Err(PlatformError::Unsupported)
+    }
+    fn set_app_volume(&self, _: &str, _: Option<u8>, _: Option<bool>) -> PResult<usize> {
+        Err(PlatformError::Unsupported)
+    }
+    /// /proc/*/comm (Linux, nur für die Entwicklung).
+    fn processes(&self) -> PResult<Vec<String>> {
+        let dir = std::fs::read_dir("/proc").map_err(|_| PlatformError::Unsupported)?;
+        Ok(dir
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().chars().all(|c| c.is_ascii_digit()))
+            .filter_map(|e| std::fs::read_to_string(e.path().join("comm")).ok())
+            .map(|s| s.trim().to_string())
+            .collect())
+    }
+    /// Kein Tresor unter Linux (nur Entwicklung) – Geheimnisse werden nicht gespeichert.
+    fn secret_get(&self, _: &str) -> PResult<Option<String>> {
+        Ok(None)
+    }
+    fn secret_set(&self, _: &str, _: Option<&str>) -> PResult<()> {
+        Err(PlatformError::Unsupported)
+    }
+    fn random_bytes(&self, n: usize) -> PResult<Vec<u8>> {
+        use std::io::Read;
+        let mut buf = vec![0u8; n];
+        std::fs::File::open("/dev/urandom")
+            .and_then(|mut f| f.read_exact(&mut buf))
+            .map_err(|e| PlatformError::Failed(e.to_string()))?;
+        Ok(buf)
+    }
 }
 
 /// Linux (Entwicklung): /proc lesen. USS = privater Speicher.

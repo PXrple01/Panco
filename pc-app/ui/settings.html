@@ -48,6 +48,10 @@
           <svg viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z" /><path d="M8.8 12.2l2.2 2.2 4.4-4.6" /></svg>
           Schutz & Start
         </button>
+        <button class="tab" data-tab="brain" type="button">
+          <svg viewBox="0 0 24 24"><path d="M8 4.5a3 3 0 1 0 0 6h8a3 3 0 1 0 0-6 3 3 0 0 0-3 3v9a3 3 0 1 0 3-3H8a3 3 0 1 0 3 3v-9a3 3 0 0 0-3-3z" /></svg>
+          Befehle & Gedächtnis
+        </button>
         <button class="tab" data-tab="files" type="button">
           <svg viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.2h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" /></svg>
           Ordner & Backup
@@ -92,6 +96,7 @@
             <div class="tile tile--wide"><span class="tile__label">Mikrofon</span><span class="tile__value" id="s-mic">–</span></div>
             <div class="tile tile--wide"><span class="tile__label">Wake-Word</span><span class="tile__value" id="s-wake">–</span></div>
             <div class="tile tile--wide"><span class="tile__label">Whisper</span><span class="tile__value" id="s-whisper">–</span></div>
+            <div class="tile tile--full"><span class="tile__label">Spiel</span><span class="tile__value" id="s-game">–</span></div>
             <div class="tile tile--full"><span class="tile__label">Zuletzt erkannt</span><span class="tile__value" id="s-last">–</span></div>
           </div>
           <p class="dim small">Wird nur gemessen, solange dieses Fenster offen ist.</p>
@@ -297,6 +302,64 @@
         </section>
       </div>
 
+      <!-- ================= Befehle & Gedächtnis ================= -->
+      <div class="panel" data-panel="brain" hidden>
+        <header class="hero">
+          <div class="hero__icon"><svg viewBox="0 0 24 24"><path d="M8 4.5a3 3 0 1 0 0 6h8a3 3 0 1 0 0-6 3 3 0 0 0-3 3v9a3 3 0 1 0 3-3H8a3 3 0 1 0 3 3v-9a3 3 0 0 0-3-3z" /></svg></div>
+          <div>
+            <h1>Befehle & Gedächtnis</h1>
+            <p>Eigene Sprachbefehle, was Panco sich über dich merkt und wann er nachfragt.</p>
+          </div>
+        </header>
+
+        <section class="card">
+          <h2>Eigene Befehle</h2>
+          <p class="dim small">Ein Name löst mehrere Panco-Befehle aus – eine Zeile pro Schritt. Braucht ein Schritt eine Bestätigung, zeigt Panco vorher alle Schritte. Per Sprache: „Neuer Befehl Feierabend: schließe Discord, Lautstärke 30 und sperr den PC“.</p>
+          <div class="macros" id="macro-list"></div>
+          <div class="actions"><button id="macro-new" class="btn btn--accent" type="button">＋ Neuer Befehl</button></div>
+        </section>
+
+        <section class="card">
+          <h2>Gedächtnis</h2>
+          <p class="dim small">Panco merkt sich, was du ihm sagst („Merk dir, mein Lieblingsspiel ist Deadlock“). Passwörter merkt er sich nie.</p>
+          <ul class="rows" id="fact-list"></ul>
+          <div class="actions">
+            <input id="fact-new" class="path-input" placeholder="Neuer Merksatz, z. B. Ich spiele abends meistens Deadlock" maxlength="300" />
+            <button id="fact-add" class="btn" type="button">Merken</button>
+          </div>
+          <h2 class="sub">Regeln</h2>
+          <p class="dim small">„Wenn ich Deadlock starte, starte auch Discord“ oder „Wenn ich ein Spiel starte, stell Spotify auf 20 Prozent“ – Regeln tun nur Dinge ohne Rückfrage.</p>
+          <ul class="rows" id="rule-list"></ul>
+        </section>
+
+        <section class="card">
+          <div class="card__head"><h2>Spotify <span class="dim small">(optional)</span></h2><span id="sp-chip" class="chip">nicht verbunden</span></div>
+          <p class="dim small">Für „Spiel Lo-Fi Beats auf Spotify“ und „Was läuft gerade?“. Pause, Weiter und Lautstärke gehen auch ohne. Abspielen per Sprache verlangt Spotify Premium. Panco verbindet sich nur, wenn du etwas fragst; die Anmeldung liegt im Windows-Tresor.</p>
+          <ol class="dim small steps">
+            <li>Auf <strong>developer.spotify.com/dashboard</strong> eine App anlegen (Web API).</li>
+            <li>Als Redirect URI eintragen: <code>http://127.0.0.1:8977/callback</code></li>
+            <li>Die Client-ID hier einfügen und „Verbinden“ drücken – der Browser fragt dich einmal.</li>
+          </ol>
+          <div class="actions">
+            <input id="sp-client" class="path-input" placeholder="Client-ID (32 Zeichen)" maxlength="40" spellcheck="false" />
+            <button id="sp-connect" class="btn btn--accent" type="button">Verbinden</button>
+            <button id="sp-disconnect" class="btn" type="button" hidden>Trennen</button>
+          </div>
+          <p class="error" id="sp-error" hidden></p>
+        </section>
+
+        <section class="card">
+          <h2>Rückfragen</h2>
+          <p class="dim small">Nur für Befehle hier am PC (getippt oder gesprochen). Vom iPhone, von Claude und bei Regeln fragt Panco immer; Installieren und Systemeinstellungen (Stufe 3) fragt er immer.</p>
+          <div class="quiet">
+            <span id="quiet-status" class="dim"></span>
+            <button id="quiet-on" class="btn" type="button">10 Minuten nicht fragen</button>
+            <button id="quiet-off" class="btn" type="button" hidden>Wieder fragen</button>
+          </div>
+          <div id="confirm-list" class="confirm-list"></div>
+        </section>
+      </div>
+
       <!-- ================= Ordner & Backup ================= -->
       <div class="panel" data-panel="files" hidden>
         <header class="hero">
@@ -387,6 +450,7 @@
     </main>
   </div>
   <script type="module" src="./src/settings.ts"></script>
+  <script type="module" src="./src/settings-brain.ts"></script>
   <script type="module" src="./src/settings-data.ts"></script>
 </body>
 </html>

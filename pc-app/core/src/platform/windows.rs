@@ -1,11 +1,15 @@
 //! Windows-Implementierung über Win32/COM (windows-rs). Keine Shell, keine Hilfsprozesse.
 
 use super::*;
+use ::windows::core::Interface;
 use ::windows::core::{w, BOOL, HSTRING, PCWSTR, PWSTR};
 use ::windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, LPARAM, LUID, WPARAM};
 use ::windows::Win32::Foundation::{LocalFree, HLOCAL};
 use ::windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
-use ::windows::Win32::Media::Audio::{eConsole, eRender, IMMDeviceEnumerator, MMDeviceEnumerator};
+use ::windows::Win32::Media::Audio::{
+    eConsole, eRender, IAudioSessionControl2, IAudioSessionManager2, IMMDeviceEnumerator, ISimpleAudioVolume,
+    MMDeviceEnumerator,
+};
 use ::windows::Win32::Security::Cryptography::{
     CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
 };
@@ -287,6 +291,94 @@ impl Platform for WindowsPlatform {
         -bias * 60
     }
 
+    fn app_volumes(&self) -> PResult<Vec<AppVolume>> {
+        let mut out: Vec<AppVolume> = Vec::new();
+        for (process, vol) in audio_sessions()? {
+            if out.iter().any(|a| a.process.eq_ignore_ascii_case(&process)) {
+                continue;
+            }
+            let (level, muted) = unsafe { (vol.GetMasterVolume().unwrap_or(1.0), vol.GetMute().map(|b| b.as_bool())) };
+            out.push(AppVolume { process, level: (level * 100.0).round() as u8, muted: muted.unwrap_or(false) });
+        }
+        Ok(out)
+    }
+
+    fn set_app_volume(&self, process: &str, level: Option<u8>, mute: Option<bool>) -> PResult<usize> {
+        let mut n = 0;
+        for (name, vol) in audio_sessions()? {
+            if !name.eq_ignore_ascii_case(process) {
+                continue;
+            }
+            unsafe {
+                if let Some(l) = level {
+                    vol.SetMasterVolume(l.min(100) as f32 / 100.0, std::ptr::null()).map_err(fail)?;
+                }
+                if let Some(m) = mute {
+                    vol.SetMute(m, std::ptr::null()).map_err(fail)?;
+                }
+            }
+            n += 1;
+        }
+        Ok(n)
+    }
+
+    fn processes(&self) -> PResult<Vec<String>> {
+        Ok(process_list().into_iter().map(|(_, _, name)| name).collect())
+    }
+
+    fn secret_get(&self, key: &str) -> PResult<Option<String>> {
+        use ::windows::Win32::Security::Credentials::{CredFree, CredReadW, CREDENTIALW, CRED_TYPE_GENERIC};
+        let target = HSTRING::from(key);
+        let mut cred: *mut CREDENTIALW = std::ptr::null_mut();
+        unsafe {
+            if CredReadW(&target, CRED_TYPE_GENERIC, None, &mut cred).is_err() || cred.is_null() {
+                return Ok(None);
+            }
+            let c = &*cred;
+            let blob = std::slice::from_raw_parts(c.CredentialBlob, c.CredentialBlobSize as usize);
+            let value = String::from_utf8_lossy(blob).to_string();
+            CredFree(cred as *const _);
+            Ok(Some(value))
+        }
+    }
+
+    fn secret_set(&self, key: &str, value: Option<&str>) -> PResult<()> {
+        use ::windows::Win32::Security::Credentials::{
+            CredDeleteW, CredWriteW, CREDENTIALW, CRED_FLAGS, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC,
+        };
+        let mut target: Vec<u16> = key.encode_utf16().chain([0]).collect();
+        unsafe {
+            match value {
+                None => {
+                    let _ = CredDeleteW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, None);
+                    Ok(())
+                }
+                Some(v) => {
+                    let mut user: Vec<u16> = "Panco".encode_utf16().chain([0]).collect();
+                    let mut blob = v.as_bytes().to_vec();
+                    let cred = CREDENTIALW {
+                        Flags: CRED_FLAGS(0),
+                        Type: CRED_TYPE_GENERIC,
+                        TargetName: PWSTR(target.as_mut_ptr()),
+                        CredentialBlobSize: blob.len() as u32,
+                        CredentialBlob: blob.as_mut_ptr(),
+                        Persist: CRED_PERSIST_LOCAL_MACHINE,
+                        UserName: PWSTR(user.as_mut_ptr()),
+                        ..Default::default()
+                    };
+                    CredWriteW(&cred, 0).map_err(fail)
+                }
+            }
+        }
+    }
+
+    fn random_bytes(&self, n: usize) -> PResult<Vec<u8>> {
+        use ::windows::Win32::Security::Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG};
+        let mut buf = vec![0u8; n];
+        unsafe { BCryptGenRandom(None, &mut buf, BCRYPT_USE_SYSTEM_PREFERRED_RNG) }.ok().map_err(fail)?;
+        Ok(buf)
+    }
+
     fn close_process(&self, process: &str) -> PResult<usize> {
         let targets: Vec<WindowInfo> =
             self.windows()?.into_iter().filter(|w| w.process.eq_ignore_ascii_case(process)).collect();
@@ -404,4 +496,75 @@ pub fn steam_path() -> Option<PathBuf> {
     let len = (size as usize / 2).saturating_sub(1);
     let s = String::from_utf16_lossy(&buf[..len]).replace('/', "\\");
     (!s.is_empty()).then(|| PathBuf::from(s))
+}
+
+/// Audio-Sitzungen des Standard-Ausgabegeräts mit Exe-Namen (Systemklänge ausgenommen).
+fn audio_sessions() -> PResult<Vec<(String, ISimpleAudioVolume)>> {
+    com_init();
+    let names: std::collections::HashMap<u32, String> =
+        process_list().into_iter().map(|(pid, _, name)| (pid, name)).collect();
+    unsafe {
+        let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).map_err(fail)?;
+        let device = enumerator.GetDefaultAudioEndpoint(eRender, eConsole).map_err(fail)?;
+        let manager = device.Activate::<IAudioSessionManager2>(CLSCTX_ALL, None).map_err(fail)?;
+        let list = manager.GetSessionEnumerator().map_err(fail)?;
+        let mut out = Vec::new();
+        for i in 0..list.GetCount().map_err(fail)? {
+            let Ok(control) = list.GetSession(i) else { continue };
+            let Ok(pid) = control.cast::<IAudioSessionControl2>().and_then(|c| c.GetProcessId()) else { continue };
+            let (Some(name), Ok(volume)) = (names.get(&pid), control.cast::<ISimpleAudioVolume>()) else { continue };
+            if pid != 0 {
+                out.push((name.clone(), volume));
+            }
+        }
+        Ok(out)
+    }
+}
+
+const STEAM_KEY: PCWSTR = w!("Software\\Valve\\Steam");
+
+/// `HKCU\Software\Valve\Steam\RunningAppID` – 0 = kein Spiel.
+pub fn steam_running_app() -> Option<u32> {
+    let mut value = 0u32;
+    let mut size = 4u32;
+    let res = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            STEAM_KEY,
+            w!("RunningAppID"),
+            ::windows::Win32::System::Registry::RRF_RT_REG_DWORD,
+            None,
+            Some(&mut value as *mut u32 as *mut _),
+            Some(&mut size),
+        )
+    };
+    (res.is_ok() && value != 0).then_some(value)
+}
+
+/// Blockiert, bis sich unter dem Steam-Schlüssel ein Wert ändert oder `timeout` abläuft.
+pub fn wait_steam_change(timeout: std::time::Duration) {
+    use ::windows::Win32::System::Registry::{
+        RegCloseKey, RegNotifyChangeKeyValue, RegOpenKeyExW, HKEY, KEY_NOTIFY, REG_NOTIFY_CHANGE_LAST_SET,
+    };
+    use ::windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
+    let ms = timeout.as_millis().min(u32::MAX as u128) as u32;
+    unsafe {
+        let mut key = HKEY::default();
+        if RegOpenKeyExW(HKEY_CURRENT_USER, STEAM_KEY, None, KEY_NOTIFY, &mut key).is_err() {
+            std::thread::sleep(timeout);
+            return;
+        }
+        match CreateEventW(None, true, false, None) {
+            Ok(event) => {
+                if RegNotifyChangeKeyValue(key, false, REG_NOTIFY_CHANGE_LAST_SET, Some(event), true).is_ok() {
+                    WaitForSingleObject(event, ms);
+                } else {
+                    std::thread::sleep(timeout);
+                }
+                let _ = CloseHandle(event);
+            }
+            Err(_) => std::thread::sleep(timeout),
+        }
+        let _ = RegCloseKey(key);
+    }
 }

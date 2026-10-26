@@ -9,6 +9,12 @@ pub struct MockPlatform {
     pub volume: Mutex<u8>,
     pub muted: Mutex<bool>,
     pub windows: Mutex<Vec<WindowInfo>>,
+    pub apps: Mutex<Vec<AppVolume>>,
+    pub procs: Mutex<Vec<String>>,
+    /// Vorbereitete HTTP-Antworten (der Reihe nach) und gestellte Anfragen
+    pub http_replies: Mutex<std::collections::VecDeque<(u16, String)>>,
+    pub http_requests: Mutex<Vec<HttpRequest>>,
+    pub secrets: Mutex<std::collections::HashMap<String, String>>,
 }
 
 impl MockPlatform {
@@ -88,5 +94,49 @@ impl Platform for MockPlatform {
     }
     fn utc_offset_secs(&self) -> i32 {
         3600
+    }
+    fn app_volumes(&self) -> PResult<Vec<AppVolume>> {
+        Ok(self.apps.lock().unwrap().clone())
+    }
+    fn set_app_volume(&self, process: &str, level: Option<u8>, mute: Option<bool>) -> PResult<usize> {
+        let mut apps = self.apps.lock().unwrap();
+        let mut n = 0;
+        for a in apps.iter_mut().filter(|a| a.process.eq_ignore_ascii_case(process)) {
+            if let Some(l) = level {
+                a.level = l;
+            }
+            if let Some(m) = mute {
+                a.muted = m;
+            }
+            n += 1;
+        }
+        drop(apps);
+        self.record(format!("app-volume {process} {level:?} {mute:?}"));
+        Ok(n)
+    }
+    fn processes(&self) -> PResult<Vec<String>> {
+        Ok(self.procs.lock().unwrap().clone())
+    }
+    fn http(&self, req: &HttpRequest) -> PResult<(u16, String)> {
+        self.http_requests.lock().unwrap().push(req.clone());
+        self.http_replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .ok_or_else(|| PlatformError::Failed("keine Antwort vorbereitet".into()))
+    }
+    fn secret_get(&self, key: &str) -> PResult<Option<String>> {
+        Ok(self.secrets.lock().unwrap().get(key).cloned())
+    }
+    fn secret_set(&self, key: &str, value: Option<&str>) -> PResult<()> {
+        let mut s = self.secrets.lock().unwrap();
+        match value {
+            Some(v) => s.insert(key.into(), v.into()),
+            None => s.remove(key),
+        };
+        Ok(())
+    }
+    fn random_bytes(&self, n: usize) -> PResult<Vec<u8>> {
+        Ok((0..n).map(|i| (i * 37 % 256) as u8).collect())
     }
 }

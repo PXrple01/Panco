@@ -236,3 +236,53 @@ fn time_date_and_help() {
     assert!(say(&e, "Was kannst du?").text().starts_with("Ich kann "));
     assert!(say(&e, "Lies mir vor, was im Editor steht").text().contains("Claude"));
 }
+
+#[test]
+fn app_volume_with_undo() {
+    use panco_core::platform::AppVolume;
+    let (e, pf) = setup();
+    *pf.apps.lock().unwrap() = vec![
+        AppVolume { process: "Spotify.exe".into(), level: 80, muted: false },
+        AppVolume { process: "Discord.exe".into(), level: 100, muted: true },
+    ];
+    assert_eq!(say(&e, "Panco, Spotify leiser").text(), "Spotify ist jetzt bei 65 %.");
+    assert_eq!(say(&e, "Discord auf 40 Prozent").text(), "Discord ist jetzt bei 40 %.");
+    // Lauter/Level hebt Stumm auf
+    assert!(!pf.apps.lock().unwrap()[1].muted);
+    say(&e, "mach das rückgängig");
+    assert_eq!(pf.apps.lock().unwrap()[1].level, 100);
+    assert!(pf.apps.lock().unwrap()[1].muted);
+    assert_eq!(say(&e, "mach Spotify stumm").text(), "Spotify ist stumm.");
+    let r = say(&e, "Steam leiser");
+    assert_eq!(r.text(), "Steam spielt gerade keinen Ton – da gibt es nichts zu regeln.");
+    assert_eq!(*pf.volume.lock().unwrap(), 50, "Gesamtlautstärke bleibt unberührt");
+}
+
+#[test]
+fn game_detection_and_playtime() {
+    let (e, _) = setup();
+    let dir = std::env::temp_dir().join(format!("panco-engine-play-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    e.set_data_dir(dir.clone());
+    // Steam meldet die App-ID → Name aus der Bibliothek; sonst bekannte Exe-Namen
+    assert_eq!(e.detect_game(Some(1422450), &[]), Some("Deadlock".into()));
+    assert_eq!(
+        e.detect_game(None, &["explorer.exe".into(), "VALORANT-Win64-Shipping.exe".into()]),
+        Some("Valorant".into())
+    );
+    assert_eq!(e.detect_game(None, &["explorer.exe".into()]), None);
+
+    assert_eq!(say(&e, "Was spiele ich gerade?").text(), "Gerade läuft kein Spiel.");
+    let ch = e.observe_game(Some("Deadlock"));
+    assert_eq!(ch, vec![panco_core::playtime::Change::Started("Deadlock".into())]);
+    assert_eq!(e.current_game().unwrap().name, "Deadlock");
+    assert!(say(&e, "Was spiele ich gerade?").text().starts_with("Gerade läuft Deadlock"));
+    // Während des Spiels kein Backup
+    assert!(e.maintenance(false).iter().any(|l| l.contains("nach dem Spiel")) || !e.config().files.backup_enabled);
+    e.observe_game(None);
+    assert!(e.current_game().is_none());
+    assert!(dir.join("spielzeit.json").is_file());
+    // 0 Sekunden gespielt zählen nicht
+    assert_eq!(say(&e, "Wie lange habe ich heute gespielt?").text(), "Heute hast du noch nicht gespielt.");
+    let _ = std::fs::remove_dir_all(dir);
+}

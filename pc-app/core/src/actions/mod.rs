@@ -24,8 +24,10 @@ mod focus;
 mod info;
 mod launch;
 mod media;
+mod memory;
 mod notes;
 mod screen;
+mod spotify;
 mod system;
 mod volume;
 mod web;
@@ -41,6 +43,8 @@ pub struct Ctx<'a> {
     pub log: &'a ActionLog,
     /// Unix-Sekunden
     pub now: i64,
+    /// Spielzeit und laufendes Spiel
+    pub play: Option<&'a crate::playtime::Tracker>,
 }
 
 /// Ergebnis einer ausgeführten Aktion.
@@ -175,6 +179,7 @@ pub fn registry() -> Vec<Box<dyn Action>> {
         Box::new(volume::VolumeSet),
         Box::new(volume::VolumeChange),
         Box::new(volume::VolumeMute),
+        Box::new(volume::VolumeApp),
         Box::new(media::MediaControl),
         Box::new(web::WebSearch),
         Box::new(web::WebOpen),
@@ -194,6 +199,16 @@ pub fn registry() -> Vec<Box<dyn Action>> {
         Box::new(notes::NoteRead),
         Box::new(notes::NoteSearch),
         Box::new(info::InfoTime),
+        Box::new(info::Playtime),
+        Box::new(memory::Remember),
+        Box::new(memory::List),
+        Box::new(memory::Forget),
+        Box::new(memory::RuleAdd),
+        Box::new(memory::MacroCreate),
+        Box::new(memory::MacroRun),
+        Box::new(memory::MacroDelete),
+        Box::new(spotify::Play),
+        Box::new(spotify::Now),
         Box::new(info::Help),
     ]
 }
