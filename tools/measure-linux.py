@@ -69,14 +69,16 @@ def main():
         ["dbus-daemon", "--session", "--fork", "--print-address"], capture_output=True, text=True, env=env
     ).stdout.strip()
     env["DBUS_SESSION_BUS_ADDRESS"] = dbus
-    if os.environ.get("REDUCED") == "1":
-        os.makedirs(f"{home}/.config/Panco", exist_ok=True)
-        with open(f"{home}/.config/Panco/config.json", "w") as f:
-            f.write('{"overlay": {"reduce_motion": true}}')
+    # Konfig: REDUCED=1 → Animationen reduziert, MODE=push_to_talk|wake|off → Sprachmodus
+    os.makedirs(f"{home}/.config/Panco", exist_ok=True)
+    with open(f"{home}/.config/Panco/config.json", "w") as f:
+        reduced = "true" if os.environ.get("REDUCED") == "1" else "false"
+        mode = os.environ.get("MODE", "push_to_talk")
+        f.write(f'{{"overlay": {{"reduce_motion": {reduced}}}, "voice": {{"mode": "{mode}"}}}}')
     app = subprocess.Popen([exe], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:
         time.sleep(4)
-        mode = "reduzierte Animationen" if os.environ.get("REDUCED") == "1" else "Standard"
+        mode = ("reduzierte Animationen" if os.environ.get("REDUCED") == "1" else "Standard") + ", Sprachmodus " + os.environ.get("MODE", "push_to_talk")
         print(f"Panco unter Linux/Xvfb, Software-Rendering (Richtwert, nicht Windows!) – {secs} s je Phase, {mode}")
         measure(app.pid, "Leerlauf (Tray, kein Fenster)", secs)
         subprocess.run(["xdotool", "key", "ctrl+space"], env=env)

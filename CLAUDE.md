@@ -68,6 +68,14 @@ Es gibt **keine freie Shell-Ausführung**. Alle Aktionen sind definierte, validi
 **Messen:** Nach jeder Etappe Ressourcenverbrauch messen und Zahlen zeigen. Echte Werte nur unter
 Windows (`tools/measure.ps1`); Werte aus der Linux-Entwicklungsumgebung klar als Richtwerte kennzeichnen.
 
+## Entwicklung, Tests, Messen
+- `pc-app/`: `cargo test` (Kern + Sprache, laufen ohne Windows), `cargo clippy --all-targets`, `cargo fmt`.
+  Windows-Code zusätzlich prüfen: `cargo check --target x86_64-pc-windows-gnu` (siehe `tools/cross/build-windows.sh`).
+- UI: `npm run check` (TypeScript), `npm run -w pc-app ui:build`.
+- Messen: `tools/measure.ps1` (Windows, echte Werte), `tools/measure-linux.py` (Linux-Richtwerte),
+  `tools/measure-avatar.mjs` (Avatar), `cargo run -p panco-voice --release --example voice_bench` (Sprache).
+- whisper.cpp unter Windows bauen braucht CMake, MSVC Build Tools und LLVM (bindgen).
+
 ## Etappenplan
 1. **Shared:** Avatar (Einzelteile, Blinzeln/Atmen), Design-Tokens, Befehls-/Tool-Schema inkl. Stufen
 2. **PC-Kern:** Tauri-Gerüst, Tray, Hotkeys, Overlay, Textbefehle, Parser, Aktions-Registry mit Stufen + Bestätigungsdialog, Log, Not-Aus, Programme/Steam-Spiele starten
@@ -83,3 +91,4 @@ Windows (`tools/measure.ps1`); Werte aus der Linux-Entwicklungsumgebung klar als
 12. **Abschluss:** README (Build/Setup beider Teile, Tailscale, iPhone-Installation), Befehlsliste, Sicherheitskonzept, Messwerte
 
 Nach jeder Etappe committen (verständliche Nachricht) und Messwerte zeigen.
+Stand: Etappen 1–3 erledigt.

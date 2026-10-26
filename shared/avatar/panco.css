@@ -65,3 +65,47 @@
     will-change: auto;
   }
 }
+
+/* ---------- Zustände (vom Controller per setState gesetzt) ---------- */
+
+/* Hört zu: Ohren aufgestellt, Augen leuchten */
+.panco .p-ear,
+.panco .p-eye__glow {
+  transition: transform 220ms var(--pc-ease-pop, ease-out), opacity 220ms;
+}
+.panco-wrap.is-listening .p-ear--l {
+  transform: translate(-2px, -5px) rotate(-8deg);
+}
+.panco-wrap.is-listening .p-ear--r {
+  transform: translate(2px, -5px) rotate(8deg);
+}
+.panco .p-eye__glow {
+  opacity: 0.55;
+}
+.panco-wrap.is-listening .p-eye__glow {
+  opacity: 1;
+}
+
+/* Denkt: drei hüpfende Punkte, Kopf wackelt leicht */
+.panco-wrap.is-thinking .p-dots {
+  opacity: 1;
+}
+.panco-wrap.is-thinking .p-dot {
+  animation: panco-dot 900ms ease-in-out infinite;
+}
+.panco-wrap.is-thinking .p-dot--2 {
+  animation-delay: 150ms;
+}
+.panco-wrap.is-thinking .p-dot--3 {
+  animation-delay: 300ms;
+}
+@keyframes panco-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-6px);
+  }
+}

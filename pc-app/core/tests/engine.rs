@@ -73,6 +73,16 @@ fn unsure_match_asks_back() {
 }
 
 #[test]
+fn voice_ignores_leftover_first_word() {
+    let (e, pf) = setup();
+    say(&e, "Personality, öffne Deadlock");
+    assert_eq!(pf.take_calls(), vec!["open steam://rungameid/1422450"]);
+    // Getippt gilt das nicht – da ist der Text genau so gemeint.
+    let r = e.command("r2", "quatsch öffne Deadlock", Source::Text);
+    assert_eq!(r.text(), "Das habe ich nicht verstanden, Chef.");
+}
+
+#[test]
 fn tier1_runs_immediately() {
     let (e, pf) = setup();
     assert_eq!(say(&e, "Lautstärke 30").text(), "Lautstärke 30.");

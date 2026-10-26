@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 pub struct Config {
     pub hotkeys: Hotkeys,
     pub overlay: OverlayConfig,
+    pub voice: VoiceSettings,
     /// Programme, Webseiten und URIs, die Panco per Name öffnen darf.
     pub apps: Vec<AppAlias>,
     /// Kurznamen für Spiele, z. B. "cs" → "Counter-Strike 2".
@@ -27,6 +28,60 @@ pub struct Config {
 pub struct Hotkeys {
     pub overlay: String,
     pub kill_switch: String,
+    /// Halten = sprechen (funktioniert in jedem Sprachmodus).
+    pub push_to_talk: String,
+    pub mic_mute: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceMode {
+    /// Offenes Mikro, lokales Wake-Word "Panco" (Standard).
+    Wake,
+    /// Mikro nur, solange die Push-to-Talk-Taste gehalten wird.
+    PushToTalk,
+    /// Keine Sprachsteuerung.
+    Off,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SttChoice {
+    /// whisper.cpp, lokal
+    Whisper,
+    /// Windows-Spracherkennung (nur Befehlsliste, offline) – zum Vergleich
+    Windows,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VoiceSettings {
+    pub mode: VoiceMode,
+    pub engine: SttChoice,
+    /// Whisper-Modell: "tiny", "base" oder "small"
+    pub model: String,
+    /// So lange bleibt Whisper nach dem letzten Befehl geladen.
+    pub keep_model_secs: u64,
+    /// Empfindlichkeit des Wake-Words (0.3 = empfindlich … 0.7 = streng)
+    pub wake_threshold: f32,
+    /// Antworten per Windows-Sprachausgabe vorlesen
+    pub speak_replies: bool,
+    /// Overlay bei Sprachbefehlen einblenden (ohne Fokus zu stehlen)
+    pub show_overlay: bool,
+}
+
+impl Default for VoiceSettings {
+    fn default() -> Self {
+        Self {
+            mode: VoiceMode::Wake,
+            engine: SttChoice::Whisper,
+            model: "base".into(),
+            keep_model_secs: 30,
+            wake_threshold: 0.5,
+            speak_replies: true,
+            show_overlay: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,7 +110,12 @@ pub struct AppAlias {
 
 impl Default for Hotkeys {
     fn default() -> Self {
-        Self { overlay: "Ctrl+Space".into(), kill_switch: "Ctrl+Alt+End".into() }
+        Self {
+            overlay: "Ctrl+Space".into(),
+            kill_switch: "Ctrl+Alt+End".into(),
+            push_to_talk: "Ctrl+Alt+Space".into(),
+            mic_mute: "Ctrl+Alt+M".into(),
+        }
     }
 }
 
@@ -79,6 +139,7 @@ impl Default for Config {
         Self {
             hotkeys: Hotkeys::default(),
             overlay: OverlayConfig::default(),
+            voice: VoiceSettings::default(),
             apps: vec![
                 app(&["discord"], "discord://", &[], Some("Discord.exe")),
                 app(&["spotify"], "spotify:", &[], Some("Spotify.exe")),
@@ -112,6 +173,15 @@ impl Default for Config {
 /// Panco-Datenordner (`%APPDATA%\Panco`).
 pub fn data_dir() -> PathBuf {
     dirs::config_dir().unwrap_or_else(std::env::temp_dir).join("Panco")
+}
+
+pub fn models_dir() -> PathBuf {
+    data_dir().join("models")
+}
+
+/// Wake-Word-Merkmale (keine Audiodaten).
+pub fn wakeword_path() -> PathBuf {
+    data_dir().join("wakeword").join("panco.rpw")
 }
 
 pub fn config_path() -> PathBuf {

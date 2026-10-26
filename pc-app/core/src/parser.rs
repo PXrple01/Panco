@@ -90,7 +90,7 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
             intent("volume.mute", json!({"mute": false}))
         }),
         rule(
-            r"^(?:(?:stell|stelle|mach|mache|setz|setze|dreh|drehe) )?(?:die |den )?(?:lautstärke|volume|ton|sound)(?: auf| zu)? (\S+)(?: prozent| %)?$",
+            r"^(?:(?:stell|stelle|mach|mache|setz|setze|dreh|drehe) )?(?:die |den )?(?:lautstärke|lautstärk|volume|ton|sound)(?: auf| zu)? (\S+)(?: prozent| %)?$",
             |c| {
                 let n = normalize::number(cap(c, 1))?;
                 (n <= 100).then(|| Intent { action: "volume.set", params: json!({"level": n}) })
@@ -108,7 +108,7 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
                 intent("volume.change", json!({"delta": delta}))
             },
         ),
-        rule(r"^(?:lautstärke|ton) (hoch|rauf|runter)$", |c| {
+        rule(r"^(?:lautstärke|lautstärk|ton) (hoch|rauf|runter)$", |c| {
             intent("volume.change", json!({"delta": if cap(c, 1) == "runter" { -10 } else { 10 }}))
         }),
         // --- Medien ---
@@ -139,7 +139,7 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
             }
         }),
         rule(
-            r"^(?:such|suche|google|googel|googele|recherchier|recherchiere)(?: (?:mir|im internet|im web|online|bei google|nach))* (.+?)(?: (?:im internet|im web|online|bei google|raus))?$",
+            r"^(?:such|suche|sucht|google|googel|googele|recherchier|recherchiere)(?: (?:mir|im internet|im web|online|bei google|nach))* (.+?)(?: (?:im internet|im web|online|bei google|raus))?$",
             |c| intent("web.search", json!({"query": cap(c, 1)})),
         ),
         // --- Fenster ---
@@ -249,6 +249,7 @@ mod tests {
         assert_eq!(p("Lautstärke 30"), Some(("volume.set", json!({"level": 30}))));
         assert_eq!(p("Lautstärke auf dreißig Prozent"), Some(("volume.set", json!({"level": 30}))));
         assert_eq!(p("stell die Lautstärke auf 45%"), Some(("volume.set", json!({"level": 45}))));
+        assert_eq!(p("Paanco, Lautstärk auf 30 Prozent."), Some(("volume.set", json!({"level": 30}))));
         assert_eq!(p("Lautstärke 300"), None);
         assert_eq!(p("lauter"), Some(("volume.change", json!({"delta": 10}))));
         assert_eq!(p("mach etwas leiser"), Some(("volume.change", json!({"delta": -5}))));
@@ -269,6 +270,10 @@ mod tests {
     #[test]
     fn web() {
         assert_eq!(p("such Deadlock Build Guides"), Some(("web.search", json!({"query": "deadlock build guides"}))));
+        assert_eq!(
+            p("Hanco, sucht Deadlock Build Guides."),
+            Some(("web.search", json!({"query": "deadlock build guides"})))
+        );
         assert_eq!(p("google mir elden ring bosse"), Some(("web.search", json!({"query": "elden ring bosse"}))));
         assert_eq!(p("öffne die Webseite twitch.tv"), Some(("web.open", json!({"url": "https://twitch.tv"}))));
     }

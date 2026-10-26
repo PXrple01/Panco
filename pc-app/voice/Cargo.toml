@@ -1,0 +1,32 @@
+[package]
+name = "panco-voice"
+description = "Panco-Sprachpipeline: Mikrofon, Sprachaktivität, Wake-Word, Whisper, Windows-TTS"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cpal = "0.18.2"
+rustpotter = { version = "3.0.2", default-features = false }
+whisper-rs = "0.16.0"
+ureq = { version = "3.5.0", default-features = false, features = ["rustls", "platform-verifier"] }
+sha2 = "0.11.1"
+serde = { workspace = true }
+thiserror.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-collections = "0.3.2"
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.62.2"
+features = [
+  "Win32_System_Com",
+  "Win32_Media_Speech",
+  "Foundation",
+  "Foundation_Collections",
+  "Globalization",
+  "Media_SpeechRecognition",
+]
+
+[dev-dependencies]
+panco-core = { path = "../core" }

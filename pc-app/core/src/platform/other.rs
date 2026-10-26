@@ -53,4 +53,54 @@ impl Platform for OtherPlatform {
     fn close_process(&self, _: &str) -> PResult<usize> {
         Err(PlatformError::Unsupported)
     }
+    fn process_stats(&self) -> PResult<ProcStats> {
+        linux_stats().ok_or(PlatformError::Unsupported)
+    }
+}
+
+/// Linux (Entwicklung): /proc lesen. USS = privater Speicher.
+fn linux_stats() -> Option<ProcStats> {
+    let me = std::process::id();
+    let mut parents: Vec<(u32, u32, String, f64)> = Vec::new(); // pid, ppid, name, cpu
+    let ticks = 100.0; // CLK_TCK ist unter Linux praktisch immer 100
+    for entry in std::fs::read_dir("/proc").ok()?.flatten() {
+        let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else { continue };
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else { continue };
+        let (Some(open), Some(close)) = (stat.find('('), stat.rfind(')')) else { continue };
+        let name = stat[open + 1..close].to_string();
+        let f: Vec<&str> = stat[close + 2..].split(' ').collect();
+        let ppid = f.get(1).and_then(|v| v.parse().ok()).unwrap_or(0);
+        let cpu = f.get(11).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0)
+            + f.get(12).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+        parents.push((pid, ppid, name, cpu / ticks));
+    }
+    let uss = |pid: u32| -> f64 {
+        std::fs::read_to_string(format!("/proc/{pid}/smaps_rollup"))
+            .map(|s| {
+                s.lines()
+                    .filter(|l| l.starts_with("Private_"))
+                    .filter_map(|l| l.split_whitespace().nth(1)?.parse::<f64>().ok())
+                    .sum::<f64>()
+                    / 1024.0
+            })
+            .unwrap_or(0.0)
+    };
+    let mut stats = ProcStats { own_mb: uss(me), ..Default::default() };
+    let mut tree = vec![me];
+    let mut i = 0;
+    while i < tree.len() {
+        let parent = tree[i];
+        for (pid, ppid, name, cpu) in &parents {
+            if *ppid == parent && !tree.contains(pid) {
+                tree.push(*pid);
+                stats.children_mb += uss(*pid);
+                stats.children.push(name.clone());
+            }
+            if *pid == parent {
+                stats.cpu_seconds += cpu;
+            }
+        }
+        i += 1;
+    }
+    Some(stats)
 }

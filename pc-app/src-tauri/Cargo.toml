@@ -10,6 +10,7 @@ tauri-build = { version = "2.7.4", features = [] }
 
 [dependencies]
 panco-core = { path = "../core" }
+panco-voice = { path = "../voice" }
 tauri = { version = "2.12.5", features = ["tray-icon", "image-png"] }
 tauri-plugin-global-shortcut = "2.4.1"
 tauri-plugin-single-instance = "2.5.4"

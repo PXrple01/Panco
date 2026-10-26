@@ -10,15 +10,21 @@ use ::windows::Win32::Security::{
     TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
 };
 use ::windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
+use ::windows::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+};
 use ::windows::Win32::System::Power::SetSuspendState;
+use ::windows::Win32::System::ProcessStatus::{
+    GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX2,
+};
 use ::windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_SZ};
 use ::windows::Win32::System::Shutdown::{
     ExitWindowsEx, LockWorkStation, EWX_POWEROFF, EWX_REBOOT, EWX_SHUTDOWN, SHTDN_REASON_FLAG_PLANNED,
     SHTDN_REASON_MAJOR_OTHER,
 };
 use ::windows::Win32::System::Threading::{
-    GetCurrentProcess, OpenProcess, OpenProcessToken, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
-    PROCESS_QUERY_LIMITED_INFORMATION,
+    GetCurrentProcess, GetCurrentProcessId, GetProcessTimes, OpenProcess, OpenProcessToken, QueryFullProcessImageNameW,
+    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
 };
 use ::windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, VIRTUAL_KEY,
@@ -245,6 +251,10 @@ impl Platform for WindowsPlatform {
         }
     }
 
+    fn process_stats(&self) -> PResult<ProcStats> {
+        stats()
+    }
+
     fn close_process(&self, process: &str) -> PResult<usize> {
         let targets: Vec<WindowInfo> =
             self.windows()?.into_iter().filter(|w| w.process.eq_ignore_ascii_case(process)).collect();
@@ -256,6 +266,70 @@ impl Platform for WindowsPlatform {
         }
         Ok(targets.len())
     }
+}
+
+/// Privater Arbeitssatz (MB) und CPU-Zeit (s) eines Prozesses.
+fn proc_usage(pid: u32) -> Option<(f64, f64)> {
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, false, pid).ok()?;
+        let mut mem = PROCESS_MEMORY_COUNTERS_EX2 {
+            cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX2>() as u32,
+            ..Default::default()
+        };
+        let mem_ok = GetProcessMemoryInfo(h, &mut mem as *mut _ as *mut PROCESS_MEMORY_COUNTERS, mem.cb).is_ok();
+        let (mut c, mut e, mut k, mut u) = Default::default();
+        let times_ok = GetProcessTimes(h, &mut c, &mut e, &mut k, &mut u).is_ok();
+        let _ = CloseHandle(h);
+        let ft = |f: ::windows::Win32::Foundation::FILETIME| {
+            ((f.dwHighDateTime as u64) << 32 | f.dwLowDateTime as u64) as f64 / 1e7
+        };
+        Some((
+            if mem_ok { mem.PrivateWorkingSetSize as f64 / 1_048_576.0 } else { 0.0 },
+            if times_ok { ft(k) + ft(u) } else { 0.0 },
+        ))
+    }
+}
+
+/// Alle Prozesse als (pid, ppid, Exe-Name).
+fn process_list() -> Vec<(u32, u32, String)> {
+    let mut out = Vec::new();
+    unsafe {
+        let Ok(snap) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else { return out };
+        let mut e = PROCESSENTRY32W { dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32, ..Default::default() };
+        let mut ok = Process32FirstW(snap, &mut e).is_ok();
+        while ok {
+            let len = e.szExeFile.iter().position(|c| *c == 0).unwrap_or(e.szExeFile.len());
+            out.push((e.th32ProcessID, e.th32ParentProcessID, String::from_utf16_lossy(&e.szExeFile[..len])));
+            ok = Process32NextW(snap, &mut e).is_ok();
+        }
+        let _ = CloseHandle(snap);
+    }
+    out
+}
+
+pub(super) fn stats() -> PResult<ProcStats> {
+    let me = unsafe { GetCurrentProcessId() };
+    let (own_mb, own_cpu) = proc_usage(me).ok_or_else(|| fail("Prozessdaten nicht lesbar"))?;
+    let mut stats = ProcStats { own_mb, cpu_seconds: own_cpu, ..Default::default() };
+    // WebView2: Browser-Prozess ist Kind von Panco, Renderer usw. sind dessen Kinder.
+    let all = process_list();
+    let mut tree = vec![me];
+    let mut i = 0;
+    while i < tree.len() {
+        let parent = tree[i];
+        for (pid, ppid, name) in &all {
+            if *ppid == parent && *pid != parent && !tree.contains(pid) {
+                tree.push(*pid);
+                if let Some((mb, cpu)) = proc_usage(*pid) {
+                    stats.children_mb += mb;
+                    stats.cpu_seconds += cpu;
+                }
+                stats.children.push(name.clone());
+            }
+        }
+        i += 1;
+    }
+    Ok(stats)
 }
 
 /// `HKCU\Software\Valve\Steam\SteamPath`

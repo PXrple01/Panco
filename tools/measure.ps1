@@ -1,12 +1,15 @@
-<#
+﻿<#
 .SYNOPSIS
   Misst RAM und CPU von Panco unter Windows (inkl. WebView2-Prozesse des Overlays).
 
 .DESCRIPTION
   Panco muss laufen. Das Skript misst nacheinander:
-    1. Leerlauf (kein Fenster)
+    1. Leerlauf (kein Fenster; im Wake-Word-Modus mit offenem Mikro)
     2. Overlay offen (öffnet es per Strg+Leertaste)
     3. Overlay wieder geschlossen
+    Mit -Voice zusätzlich:
+    4. Sprachbefehl (du sagst "Panco, öffne …" – Whisper wird geladen)
+    5. Nach der Freigabe von Whisper (wartet "keep_model_secs" + 5 s)
   RAM = "Arbeitsspeicher (privater Arbeitssatz)" wie im Task-Manager, summiert über Panco und
   alle Kindprozesse (msedgewebview2.exe). CPU = Prozent EINES Kerns im Mittel über die Phase.
 
@@ -15,7 +18,9 @@
 #>
 param(
   [int]$Seconds = 20,
-  [switch]$Manual   # Hotkeys nicht simulieren, sondern selbst drücken
+  [switch]$Manual,  # Hotkeys nicht simulieren, sondern selbst drücken
+  [switch]$Voice,   # Sprach-Phasen mitmessen
+  [int]$KeepModelSecs = 30
 )
 
 $ErrorActionPreference = 'Stop'
@@ -83,6 +88,14 @@ $results += Measure-Phase 'Overlay offen'
 Press-Hotkey 'Overlay schließen (Strg+Leertaste oder Esc)'
 Start-Sleep -Seconds 5   # WebView2 braucht einen Moment zum Beenden
 $results += Measure-Phase 'Overlay geschlossen'
+
+if ($Voice) {
+  Read-Host "Gleich: sag nach Enter deutlich `"Panco, öffne <ein Spiel>`" (oder halte Strg+Alt+Leertaste und sprich). Enter"
+  $results += Measure-Phase 'Sprachbefehl (Whisper geladen)'
+  Write-Host "Warte $($KeepModelSecs + 5) s, bis Whisper freigegeben ist ..."
+  Start-Sleep -Seconds ($KeepModelSecs + 5)
+  $results += Measure-Phase 'Nach Freigabe von Whisper'
+}
 
 Write-Host "Zusammenfassung (zum Kopieren):"
 $results | ConvertTo-Json -Compress | Write-Host

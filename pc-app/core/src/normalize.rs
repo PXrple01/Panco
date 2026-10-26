@@ -1,26 +1,35 @@
 //! Text-Normalisierung für Parser und unscharfen Vergleich.
 
-/// Für den Parser: klein, ohne Satzzeichen am Rand, ohne Anrede "Panco", Füllwörter raus.
+/// Für den Parser: klein, ohne Satzzeichen, ohne Anrede "Panco", Füllwörter raus.
 pub fn command(text: &str) -> String {
     let lower = text.to_lowercase();
-    let cleaned: String =
-        lower.chars().map(|c| if matches!(c, ',' | '!' | '?' | '"' | '„' | '“' | ';') { ' ' } else { c }).collect();
-    let mut words: Vec<&str> = cleaned.split_whitespace().collect();
-    // Punkt am Satzende entfernen ("Öffne Deadlock.") – Punkte im Wort (twitch.tv) bleiben.
-    if let Some(last) = words.last_mut() {
-        *last = last.trim_end_matches('.');
-    }
-    // Anrede am Anfang: "hey panco", "panco", "panko" … (ein einzelnes "okay" bleibt als Antwort stehen)
-    while words.len() > 1
-        && matches!(words[0], "hey" | "hallo" | "ok" | "okay" | "panco" | "panko" | "pancho" | "banco")
-    {
+    let cleaned: String = lower
+        .chars()
+        .map(|c| if matches!(c, ',' | '!' | '?' | '"' | '„' | '“' | ';' | '-' | '–') { ' ' } else { c })
+        .collect();
+    // Punkte am Wortende entfernen ("Lautstärke. Auf 30.") – Punkte im Wort (twitch.tv) bleiben.
+    let mut words: Vec<&str> =
+        cleaned.split_whitespace().map(|w| w.trim_end_matches(['.', ':'])).filter(|w| !w.is_empty()).collect();
+    // Anrede am Anfang: "hey panco", "Hanco", "Pango" … (ein einzelnes "okay" bleibt als Antwort stehen)
+    while words.len() > 1 && (matches!(words[0], "hey" | "hallo" | "ok" | "okay") || is_wake_word(words[0])) {
         words.remove(0);
     }
     words
         .into_iter()
-        .filter(|w| !w.is_empty() && !matches!(*w, "bitte" | "mal" | "doch" | "kurz" | "eben" | "jetzt"))
+        .filter(|w| !matches!(*w, "bitte" | "mal" | "doch" | "kurz" | "eben" | "jetzt"))
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Klingt wie "Panco"? Whisper schreibt das Wake-Word oft als "Hanco", "Pango", "Panko", "Paanco" …
+pub fn is_wake_word(word: &str) -> bool {
+    let w = name(word);
+    let len = w.chars().count();
+    // Lautmuster P/B/H/F/V + a + n + g/k/c + o/u ("paangu", "hanco") oder sehr ähnlich geschrieben.
+    static PATTERN: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"^[pbhfvw]a+n+[gkcq]+[oua]+$").unwrap());
+    (4..=7).contains(&len)
+        && (PATTERN.is_match(&w) || strsim::jaro_winkler(&w, "panco").max(strsim::jaro_winkler(&w, "panko")) >= 0.8)
 }
 
 /// Für Namensvergleiche: ASCII-nah, ohne Sonderzeichen, Ziffern bleiben.
@@ -115,6 +124,11 @@ mod tests {
         assert_eq!(command("Panco, öffne bitte mal Deadlock."), "öffne deadlock");
         assert_eq!(command("Hey Panko! Lautstärke 30"), "lautstärke 30");
         assert_eq!(command("öffne twitch.tv"), "öffne twitch.tv");
+        assert_eq!(command("Hanco, Öffne Deadlock."), "öffne deadlock");
+        assert_eq!(command("Paangu, Fahr den PC herunter."), "fahr den pc herunter");
+        assert_eq!(command("Pango. Lautstärke 30"), "lautstärke 30");
+        assert_eq!(command("Panko"), "panko");
+        assert_eq!(command("Paanco, Lautstärk auf 30 Prozent."), "lautstärk auf 30 prozent");
     }
 
     #[test]

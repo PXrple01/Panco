@@ -24,6 +24,8 @@ pub struct UiSettings {
     show_avatar: bool,
     auto_hide_ms: u64,
     enabled: bool,
+    /// Aktueller Avatar-/Mikrofonzustand (das Overlay wird oft erst nach einem Ereignis erzeugt).
+    state: ServerMessage,
 }
 
 #[tauri::command]
@@ -35,5 +37,6 @@ pub fn ui_settings(app: AppHandle) -> UiSettings {
         show_avatar: o.show_avatar,
         auto_hide_ms: o.auto_hide_ms,
         enabled: engine.enabled(),
+        state: crate::state_message(&app),
     }
 }

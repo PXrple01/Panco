@@ -69,4 +69,7 @@ impl Platform for MockPlatform {
         self.record(format!("close {process}"));
         Ok(1)
     }
+    fn process_stats(&self) -> PResult<ProcStats> {
+        Ok(ProcStats::default())
+    }
 }

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>Panco – Einstellungen & Diagnose</title>
+</head>
+<body>
+  <main class="page">
+    <header class="head">
+      <div id="avatar" class="head__avatar"></div>
+      <div>
+        <h1>Panco</h1>
+        <p class="dim" id="headline">Einstellungen & Diagnose</p>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>Diagnose <span class="dim small">(live, nur solange dieses Fenster offen ist)</span></h2>
+      <dl class="stats">
+        <dt>Panco</dt><dd id="s-proc">–</dd>
+        <dt>Fenster (WebView2)</dt><dd id="s-web">–</dd>
+        <dt>CPU gesamt</dt><dd id="s-cpu">–</dd>
+        <dt>Mikrofon</dt><dd id="s-mic">–</dd>
+        <dt>Wake-Word</dt><dd id="s-wake">–</dd>
+        <dt>Whisper</dt><dd id="s-whisper">–</dd>
+        <dt>Zuletzt erkannt</dt><dd id="s-last">–</dd>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>Sprachsteuerung</h2>
+      <div class="field">
+        <span class="label">Modus</span>
+        <div class="seg" role="radiogroup" id="mode">
+          <label><input type="radio" name="mode" value="wake" /> Wake-Word „Panco“</label>
+          <label><input type="radio" name="mode" value="push_to_talk" /> Push-to-Talk</label>
+          <label><input type="radio" name="mode" value="off" /> Aus</label>
+        </div>
+      </div>
+      <label class="field row">
+        <span class="label">Mikrofon stumm</span>
+        <input type="checkbox" id="muted" class="switch" />
+      </label>
+      <div class="field">
+        <span class="label">Spracherkennung</span>
+        <div class="seg" role="radiogroup" id="engine">
+          <label><input type="radio" name="engine" value="whisper" /> Whisper (lokal)</label>
+          <label><input type="radio" name="engine" value="windows" /> Windows (Vergleich)</label>
+        </div>
+        <p class="dim small">Windows nutzt nur eine feste Befehlsliste, damit kein Audio an Microsoft geht.</p>
+      </div>
+      <div class="field">
+        <span class="label">Whisper-Modell</span>
+        <ul class="models" id="models"></ul>
+      </div>
+      <label class="field">
+        <span class="label">Wake-Word-Empfindlichkeit <span class="dim" id="th-val"></span></span>
+        <input type="range" id="threshold" min="0.3" max="0.7" step="0.05" />
+        <span class="dim small range-legend"><span>empfindlich</span><span>streng</span></span>
+      </label>
+      <label class="field row">
+        <span class="label">Antworten vorlesen</span>
+        <input type="checkbox" id="speak" class="switch" />
+      </label>
+      <label class="field row">
+        <span class="label">Overlay bei Sprachbefehlen zeigen</span>
+        <input type="checkbox" id="overlay" class="switch" />
+      </label>
+      <label class="field row">
+        <span class="label">Whisper geladen halten (Sekunden)</span>
+        <input type="number" id="keep" min="5" max="600" step="5" class="num" />
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>Wake-Word einsprechen</h2>
+      <p class="dim" id="train-status">Sag sechsmal „Panco“, damit Panco deine Stimme erkennt. Gespeichert werden nur Merkmale, keine Aufnahmen.</p>
+      <div class="train">
+        <div class="dots" id="train-dots"></div>
+        <button class="btn btn--accent" id="train-start" type="button">Einsprechen starten</button>
+        <button class="btn" id="train-cancel" type="button" hidden>Abbrechen</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Tastenkürzel</h2>
+      <dl class="stats">
+        <dt>Overlay</dt><dd id="hk-overlay">–</dd>
+        <dt>Push-to-Talk (halten)</dt><dd id="hk-ptt">–</dd>
+        <dt>Mikrofon stumm</dt><dd id="hk-mute">–</dd>
+        <dt>Not-Aus</dt><dd id="hk-kill">–</dd>
+      </dl>
+      <p class="dim small">Änderbar in <code id="cfg-path"></code></p>
+    </section>
+    <p class="error" id="error" hidden></p>
+  </main>
+  <script type="module" src="./src/settings.ts"></script>
+</body>
+</html>

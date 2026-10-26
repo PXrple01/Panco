@@ -37,6 +37,23 @@ body {
 
 .avatar {
   flex: 0 0 120px;
+  position: relative;
+  --level: 0;
+}
+/* Schallwellen hinter dem Avatar, pulsieren mit dem Mikrofonpegel (nur transform/opacity) */
+.avatar::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--pc-accent);
+  opacity: 0;
+  transform: scale(1);
+  transition: transform 100ms linear, opacity 160ms;
+}
+.avatar.is-hearing::before {
+  opacity: calc(0.25 + var(--level) * 0.6);
+  transform: scale(calc(1 + var(--level) * 0.25));
 }
 .avatar.is-off {
   display: none;
@@ -68,6 +85,38 @@ body {
     opacity: 0;
     transform: scale(0.85);
   }
+}
+
+.heard {
+  margin: 0 0 -4px;
+  font-size: 12px;
+  color: var(--pc-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Mikrofon-Anzeige in der Befehlszeile */
+.mic {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--pc-text-dim);
+  opacity: 0.4;
+  flex: none;
+}
+.mic[data-state="wake"] {
+  background: var(--pc-accent);
+  opacity: 1;
+}
+.mic[data-state="recording"] {
+  background: #f43f5e;
+  opacity: 1;
+  box-shadow: 0 0 8px #f43f5e;
+}
+.mic[data-state="muted"] {
+  background: var(--pc-danger);
+  opacity: 0.8;
 }
 
 .prompt {

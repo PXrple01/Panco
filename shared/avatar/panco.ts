@@ -39,6 +39,12 @@ export class PancoAvatar {
     this.el.classList.toggle("is-resting", resting);
   }
 
+  /** Zustand aus der Statusnachricht (hört zu / denkt / Ruhe). */
+  setState(state: "idle" | "alert" | "listening" | "thinking" | "sleeping"): void {
+    this.el.classList.toggle("is-listening", state === "listening" || state === "alert");
+    this.el.classList.toggle("is-thinking", state === "thinking");
+  }
+
   /** Entfernt den Avatar und alle Timer/Listener. */
   destroy(): void {
     this.stop();

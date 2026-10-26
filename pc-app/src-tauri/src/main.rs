@@ -8,11 +8,13 @@
 mod hotkeys;
 mod ipc;
 mod overlay;
+mod settings;
 mod tray;
+mod voice;
 
 use panco_core::config::{config_path, data_dir, Config};
 use panco_core::log::ActionLog;
-use panco_core::protocol::{AvatarState, MicState, ServerMessage};
+use panco_core::protocol::ServerMessage;
 use panco_core::{platform, Engine};
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, RunEvent};
@@ -29,6 +31,7 @@ pub fn engine(app: &AppHandle) -> Arc<Engine> {
 /// Not-Aus umschalten: Engine, Tray und Overlay synchron halten.
 pub fn set_enabled(app: &AppHandle, on: bool) {
     engine(app).set_enabled(on);
+    voice::apply(app); // Not-Aus schließt sofort das Mikrofon
     tray::refresh(app);
     if !on {
         overlay::hide(app);
@@ -37,7 +40,9 @@ pub fn set_enabled(app: &AppHandle, on: bool) {
 }
 
 pub fn state_message(app: &AppHandle) -> ServerMessage {
-    ServerMessage::State { avatar: AvatarState::Idle, mic: MicState::Off, enabled: engine(app).enabled(), level: None }
+    let v = voice::get(app);
+    let (avatar, mic) = (*v.avatar.lock().unwrap(), *v.mic.lock().unwrap());
+    ServerMessage::State { avatar, mic, enabled: engine(app).enabled(), level: None }
 }
 
 /// Konfig neu laden (Tray-Menü) und Hotkeys neu registrieren.
@@ -48,6 +53,7 @@ pub fn reload_config(app: &AppHandle) {
     }
     engine(app).set_config(cfg);
     hotkeys::register_all(app);
+    voice::apply(app);
 }
 
 fn main() {
@@ -63,8 +69,20 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _, _| overlay::show(app, true)))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(Panco { engine })
-        .invoke_handler(tauri::generate_handler![ipc::send, ipc::hide_overlay, ipc::ui_settings])
+        .manage(settings::CpuSampler::default())
+        .invoke_handler(tauri::generate_handler![
+            ipc::send,
+            ipc::hide_overlay,
+            ipc::ui_settings,
+            settings::status,
+            settings::set_voice,
+            settings::set_muted,
+            settings::download_model,
+            settings::train_start,
+            settings::train_cancel,
+        ])
         .setup(|app| {
+            voice::start(app.handle());
             tray::create(app.handle())?;
             hotkeys::register_all(app.handle());
             Ok(())

@@ -8,6 +8,7 @@
   <div id="card" class="card">
     <div id="avatar" class="avatar"></div>
     <div class="main">
+      <p id="heard" class="heard" hidden></p>
       <p id="bubble" class="bubble" hidden></p>
       <div id="confirm" class="confirm" hidden>
         <button id="yes" class="btn btn--yes" type="button">Ja</button>
@@ -15,6 +16,7 @@
         <span id="confirm-hint" class="hint"></span>
       </div>
       <form id="form" class="prompt" autocomplete="off">
+        <span id="mic" class="mic" data-state="off" aria-hidden="true"></span>
         <input id="input" type="text" maxlength="500" spellcheck="false" placeholder="Was soll ich tun?" aria-label="Befehl" />
         <kbd>Esc</kbd>
       </form>

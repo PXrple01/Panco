@@ -209,7 +209,12 @@ impl Engine {
             }
         }
 
-        match parser::parse(&norm) {
+        // Gesprochen: Reste des Wake-Words ("…co, öffne X") stehen manchmal noch vorne – dann ohne erstes Wort.
+        let intent = parser::parse(&norm).or_else(|| match source {
+            Source::Voice => norm.split_once(' ').and_then(|(_, rest)| parser::parse(rest)),
+            _ => None,
+        });
+        match intent {
             Some(intent) => self.run(id, intent.action, intent.params, source, Some(text.to_string())),
             None => {
                 self.log_simple(&source, Some(text), "not_understood", "");

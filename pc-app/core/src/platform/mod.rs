@@ -35,6 +35,18 @@ pub enum PowerMode {
     Sleep,
 }
 
+/// Ressourcen von Panco selbst und seinen Kindprozessen (WebView2).
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+pub struct ProcStats {
+    /// Privater Arbeitssatz von Panco in MB (wie im Task-Manager).
+    pub own_mb: f64,
+    /// Summe der Kindprozesse (Overlay-WebView) in MB.
+    pub children_mb: f64,
+    /// CPU-Zeit aller Prozesse zusammen in Sekunden (für Prozent: Differenz / Zeit).
+    pub cpu_seconds: f64,
+    pub children: Vec<String>,
+}
+
 /// Sichtbares Top-Level-Fenster.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WindowInfo {
@@ -61,6 +73,8 @@ pub trait Platform: Send + Sync {
     fn focus_window(&self, id: u64) -> PResult<()>;
     /// Schließt ein Programm sanft (WM_CLOSE an alle seine Fenster), kein Kill.
     fn close_process(&self, process: &str) -> PResult<usize>;
+    /// RAM/CPU von Panco und seinen Kindprozessen (nur für das Diagnosefenster).
+    fn process_stats(&self) -> PResult<ProcStats>;
 }
 
 /// Die echte Plattform des laufenden Systems.

@@ -5,14 +5,22 @@ import "./overlay.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { PancoAvatar } from "../../../shared/avatar/panco";
-import type { ClientMessage, ConfirmRequest, ServerMessage } from "../../../shared/schema/messages";
+import type { AvatarState, ClientMessage, ConfirmRequest, ServerMessage, State } from "../../../shared/schema/messages";
 
 interface UiSettings {
   reduce_motion: boolean;
   show_avatar: boolean;
   auto_hide_ms: number;
   enabled: boolean;
+  state: State;
 }
+
+const MIC_LABEL: Record<string, string> = {
+  off: "Mikro aus",
+  wake: "wartet auf „Panco“",
+  recording: "hört zu …",
+  muted: "Mikro stumm",
+};
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const avatarHost = $<HTMLDivElement>("avatar");
@@ -21,11 +29,14 @@ const form = $<HTMLFormElement>("form");
 const input = $<HTMLInputElement>("input");
 const confirmRow = $<HTMLDivElement>("confirm");
 const confirmHint = $<HTMLSpanElement>("confirm-hint");
+const heard = $<HTMLParagraphElement>("heard");
+const mic = $<HTMLSpanElement>("mic");
 
 const REST_AFTER_MS = 10_000;
 let avatar: PancoAvatar | null = null;
 let restTimer = 0;
-let settings: UiSettings = { reduce_motion: false, show_avatar: true, auto_hide_ms: 1600, enabled: true };
+let settings: Omit<UiSettings, "state"> = { reduce_motion: false, show_avatar: true, auto_hide_ms: 1600, enabled: true };
+let lastAvatar: AvatarState = "idle";
 let pendingConfirm: ConfirmRequest | null = null;
 let hideTimer = 0;
 let typeTimer = 0;
@@ -73,7 +84,11 @@ function handle(msg: ServerMessage) {
       confirmRow.hidden = true;
       say(msg.text, !msg.ok && msg.mood === "error");
       react(msg.mood);
-      if (msg.ok && settings.auto_hide_ms > 0) hideTimer = window.setTimeout(hide, settings.auto_hide_ms);
+      // Erfolg: kurz zeigen, dann weg. Fehler: länger zeigen – aber ein per Sprache (ohne Fokus)
+      // geöffnetes Overlay verschwindet immer von selbst, es soll kein Spiel verdecken.
+      if (settings.auto_hide_ms > 0 && (msg.ok || !document.hasFocus())) {
+        hideTimer = window.setTimeout(hide, msg.ok ? settings.auto_hide_ms : settings.auto_hide_ms * 2.5);
+      }
       break;
     case "confirm_request":
       pendingConfirm = msg;
@@ -83,10 +98,25 @@ function handle(msg: ServerMessage) {
       $<HTMLButtonElement>("yes").focus();
       break;
     case "state":
-      settings.enabled = msg.enabled;
-      if (!msg.enabled) say("Not-Aus aktiv.", true);
+      showState(msg);
       break;
   }
+}
+
+/** Avatar-Zustand, Mikrofon-Anzeige und Pegel (Schallwellen) aktualisieren. */
+function showState(msg: State) {
+  settings.enabled = msg.enabled;
+  if (!msg.enabled) say("Not-Aus aktiv.", true);
+  avatar?.setState(msg.avatar);
+  avatarHost.style.setProperty("--level", String(msg.level ?? 0));
+  avatarHost.classList.toggle("is-hearing", msg.mic === "recording");
+  mic.dataset.state = msg.mic;
+  mic.title = MIC_LABEL[msg.mic] ?? "";
+  // Per Sprache geöffnet, aber nichts gesagt → still wieder verschwinden.
+  if (msg.avatar === "idle" && lastAvatar === "listening" && !document.hasFocus()) {
+    hideTimer = window.setTimeout(hide, 1200);
+  }
+  lastAvatar = msg.avatar;
 }
 
 form.addEventListener("submit", (e) => {
@@ -128,13 +158,19 @@ for (const ev of ["keydown", "pointermove", "pointerdown"]) window.addEventListe
 
 // Nachrichten, die nicht aus einer Eingabe hier stammen (Sprache, iPhone, Not-Aus).
 listen<ServerMessage>("panco://message", (e) => handle(e.payload));
+// Was die Spracherkennung verstanden hat – zur Kontrolle klein über der Sprechblase.
+listen<string>("panco://heard", (e) => {
+  heard.hidden = false;
+  heard.textContent = `„${e.payload}“`;
+});
 
 (async () => {
-  settings = await invoke<UiSettings>("ui_settings");
+  const ui = await invoke<UiSettings>("ui_settings");
+  settings = ui;
   document.documentElement.classList.toggle("reduce-motion", settings.reduce_motion);
   if (settings.show_avatar) avatar = new PancoAvatar(avatarHost, { reduced: settings.reduce_motion });
   else avatarHost.classList.add("is-off");
   wake();
-  if (!settings.enabled) say("Not-Aus aktiv.", true);
+  showState(ui.state);
   input.focus();
 })();
