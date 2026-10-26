@@ -1,0 +1,151 @@
+{
+  "$comment": "Panco-Aktionskatalog: einzige Quelle für Whitelist, Stufen, Parameter-Schemas und (ab Etappe 6) Claude-Tools. Rust prüft im Test, dass jede hier gelistete Aktion implementiert ist und umgekehrt. tier = Mindeststufe; dynamic_tier = Stufe kann je nach Parametern steigen (z. B. Pfad außerhalb freigegebener Ordner). remote = darf vom iPhone ausgelöst werden.",
+  "version": 1,
+  "actions": [
+    {
+      "id": "app.launch",
+      "tier": 1,
+      "remote": true,
+      "title": "Spiel oder Programm starten",
+      "description": "Startet ein Steam-Spiel oder ein Programm/eine Webseite aus der Alias-Liste. target ist der gesprochene Name, Panco sucht unscharf.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target"],
+        "properties": { "target": { "type": "string", "minLength": 1, "maxLength": 120 } }
+      }
+    },
+    {
+      "id": "app.close",
+      "tier": 2,
+      "remote": true,
+      "title": "Programm beenden",
+      "description": "Schließt ein laufendes Programm sanft (wie das X am Fenster). Braucht Bestätigung.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target"],
+        "properties": { "target": { "type": "string", "minLength": 1, "maxLength": 120 } }
+      }
+    },
+    {
+      "id": "window.focus",
+      "tier": 1,
+      "remote": true,
+      "title": "Zu Fenster wechseln",
+      "description": "Holt das Fenster, dessen Titel oder Programmname am besten zu target passt, in den Vordergrund.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target"],
+        "properties": { "target": { "type": "string", "minLength": 1, "maxLength": 120 } }
+      }
+    },
+    {
+      "id": "volume.set",
+      "tier": 1,
+      "remote": true,
+      "title": "Lautstärke setzen",
+      "description": "Setzt die Gesamtlautstärke in Prozent.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["level"],
+        "properties": { "level": { "type": "integer", "minimum": 0, "maximum": 100 } }
+      }
+    },
+    {
+      "id": "volume.change",
+      "tier": 1,
+      "remote": true,
+      "title": "Lauter/leiser",
+      "description": "Ändert die Gesamtlautstärke relativ um delta Prozentpunkte.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["delta"],
+        "properties": { "delta": { "type": "integer", "minimum": -100, "maximum": 100 } }
+      }
+    },
+    {
+      "id": "volume.mute",
+      "tier": 1,
+      "remote": true,
+      "title": "Stummschalten",
+      "description": "Schaltet den Ton stumm (mute=true), wieder an (false) oder um (weglassen).",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "mute": { "type": "boolean" } }
+      }
+    },
+    {
+      "id": "media.control",
+      "tier": 1,
+      "remote": true,
+      "title": "Medien steuern",
+      "description": "Sendet eine Medientaste: Play/Pause, nächster oder vorheriger Titel, Stopp.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command"],
+        "properties": { "command": { "enum": ["play_pause", "next", "previous", "stop"] } }
+      }
+    },
+    {
+      "id": "web.search",
+      "tier": 1,
+      "remote": true,
+      "title": "Im Web suchen",
+      "description": "Öffnet eine Websuche im Standardbrowser.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["query"],
+        "properties": { "query": { "type": "string", "minLength": 1, "maxLength": 200 } }
+      }
+    },
+    {
+      "id": "web.open",
+      "tier": 1,
+      "remote": true,
+      "title": "Webseite öffnen",
+      "description": "Öffnet eine https-Adresse im Standardbrowser.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url"],
+        "properties": { "url": { "type": "string", "pattern": "^https://", "maxLength": 500 } }
+      }
+    },
+    {
+      "id": "screen.screenshot",
+      "tier": 1,
+      "remote": true,
+      "title": "Screenshot",
+      "description": "Speichert einen Screenshot des ganzen Bildschirms in Bilder\\Screenshots.",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} }
+    },
+    {
+      "id": "system.lock",
+      "tier": 1,
+      "remote": true,
+      "title": "PC sperren",
+      "description": "Sperrt den Windows-Bildschirm.",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} }
+    },
+    {
+      "id": "system.power",
+      "tier": 2,
+      "remote": true,
+      "title": "Herunterfahren / Neustart / Ruhemodus",
+      "description": "Fährt den PC herunter, startet ihn neu oder versetzt ihn in den Ruhemodus. Braucht immer Bestätigung am PC.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mode"],
+        "properties": { "mode": { "enum": ["shutdown", "restart", "sleep"] } }
+      }
+    }
+  ]
+}

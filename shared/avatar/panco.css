@@ -1,0 +1,66 @@
+/*
+ * Panco-Avatar: Animationen.
+ * Performance-Regeln:
+ *  - Nur transform/opacity.
+ *  - Dauerhafte Bewegung (Atmen/Schweben) liegt auf dem HTML-Wrapper .panco-wrap, nicht auf
+ *    SVG-Kindern: so kann der Browser sie auf dem Compositor laufen lassen, ohne das SVG
+ *    jedes Frame neu zu zeichnen. SVG-Teile bewegen sich nur kurz (Blinzeln, Reaktionen).
+ *  - .is-paused (unsichtbares Fenster), .is-reduced (Einstellung / prefers-reduced-motion).
+ */
+.panco-wrap {
+  display: inline-block;
+  line-height: 0;
+  transform-origin: 50% 92%;
+  animation: panco-breathe 4.2s var(--pc-ease-soft, ease-in-out) infinite;
+  will-change: transform;
+}
+
+.panco-wrap > svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* Alle Einzelteile drehen/skalieren um ihren eigenen Mittelpunkt */
+.panco [class^="p-"],
+.panco [class*=" p-"] {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Atmen + leichtes Schweben: Squash & Stretch im Kleinen */
+@keyframes panco-breathe {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  50% {
+    transform: translateY(-3%) scale(0.985, 1.025);
+  }
+}
+
+/* Blinzeln: per JS-Klasse ausgelöst (zufälliges Intervall 3–6 s) */
+.panco .p-eye {
+  transition: transform 70ms ease-in;
+}
+.panco-wrap.is-blinking .p-eye {
+  transform: scaleY(0.08);
+}
+
+/* Pausiert, wenn das Fenster unsichtbar ist */
+.panco-wrap.is-paused,
+.panco-wrap.is-paused * {
+  animation-play-state: paused !important;
+}
+
+/* Reduzierte Bewegung: kein Atmen, nur Blinzeln */
+.panco-wrap.is-reduced {
+  animation: none;
+  will-change: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .panco-wrap {
+    animation: none;
+    will-change: auto;
+  }
+}

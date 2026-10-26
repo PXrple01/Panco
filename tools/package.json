@@ -1,0 +1,13 @@
+{
+  "name": "panco-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "avatar:dev": "vite avatar-preview",
+    "avatar:build": "vite build avatar-preview --outDir ../out/avatar-preview --emptyOutDir",
+    "avatar:measure": "npm run avatar:build && node measure-avatar.mjs"
+  },
+  "devDependencies": {
+    "vite": "8.3.5"
+  }
+}

@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" class="panco" role="img" aria-label="Panco">
+  <!--
+    Panco – Chibi-Panda-Geist. Jede Gruppe mit class="p-…" ist ein eigenständig
+    animierbares Teil (Ohren, Augen, Pupillen, Arme, Schwanz, Kristall, Bäckchen).
+    Regeln: nur transform/opacity animieren, keine Filter (Glow = Radialverläufe).
+  -->
+  <defs>
+    <radialGradient id="pg-body" cx="45%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset=".7" stop-color="#F4F1FC"/>
+      <stop offset="1" stop-color="#DCD3F5"/>
+    </radialGradient>
+    <radialGradient id="pg-glow">
+      <stop offset="0" stop-color="#8B5CF6" stop-opacity=".75"/>
+      <stop offset="1" stop-color="#8B5CF6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="pg-iris" cx="40%" cy="30%" r="75%">
+      <stop offset="0" stop-color="#C4B5FD"/>
+      <stop offset=".55" stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#4C1D95"/>
+    </radialGradient>
+    <linearGradient id="pg-crystal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#EDE9FE"/>
+      <stop offset=".45" stop-color="#A78BFA"/>
+      <stop offset="1" stop-color="#4C1D95"/>
+    </linearGradient>
+    <radialGradient id="pg-cheek">
+      <stop offset="0" stop-color="#F0ABFC" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#E879F9" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Bodenschatten -->
+  <ellipse class="p-shadow" cx="120" cy="224" rx="52" ry="7" fill="#4C1D95" opacity=".45"/>
+
+  <!-- Teile hinter dem Körper -->
+  <g class="p-tail">
+    <path d="M178 176c14-2 26 6 26 18 0 9-8 14-15 11-6-2-6-10 0-11" fill="none" stroke="#7C5BD6" stroke-width="13" stroke-linecap="round"/>
+    <path d="M178 176c14-2 26 6 26 18 0 9-8 14-15 11-6-2-6-10 0-11" fill="none" stroke="#14111C" stroke-width="8" stroke-linecap="round"/>
+  </g>
+  <g class="p-ear p-ear--l">
+    <circle cx="64" cy="48" r="25" fill="#14111C" stroke="#7C5BD6" stroke-width="2.5"/>
+    <circle cx="64" cy="48" r="12" fill="#6D28D9" opacity=".8"/>
+  </g>
+  <g class="p-ear p-ear--r">
+    <circle cx="176" cy="48" r="25" fill="#14111C" stroke="#7C5BD6" stroke-width="2.5"/>
+    <circle cx="176" cy="48" r="12" fill="#6D28D9" opacity=".8"/>
+  </g>
+
+  <!-- Körper: runder Kopf, Geister-Saum unten -->
+  <path class="p-body" fill="url(#pg-body)" stroke="#14111C" stroke-width="3" stroke-linejoin="round"
+    d="M120 30C166 30 198 62 198 106c0 34-8 62-18 84q-15 18-30 6q-15 14-30 1q-15 13-30-1q-15 12-30-6C50 168 42 140 42 106 42 62 74 30 120 30Z"/>
+
+  <!-- Arme (vor dem Körper, Drehpunkt an der Schulter) -->
+  <g class="p-arm p-arm--l">
+    <ellipse cx="56" cy="164" rx="12" ry="19" transform="rotate(28 56 164)" fill="#14111C"/>
+  </g>
+  <g class="p-arm p-arm--r">
+    <ellipse cx="184" cy="164" rx="12" ry="19" transform="rotate(-28 184 164)" fill="#14111C"/>
+  </g>
+
+  <!-- Kristall auf der Stirn -->
+  <g class="p-crystal">
+    <ellipse class="p-crystal__glow" cx="120" cy="62" rx="22" ry="20" fill="url(#pg-glow)"/>
+    <path d="M120 47l10 15-10 16-10-16Z" fill="url(#pg-crystal)" stroke="#4C1D95" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M120 47v31M110 62h20" stroke="#EDE9FE" stroke-width="1" opacity=".55"/>
+  </g>
+
+  <!-- Augenflecken -->
+  <ellipse cx="86" cy="110" rx="25" ry="30" transform="rotate(22 86 110)" fill="#14111C"/>
+  <ellipse cx="154" cy="110" rx="25" ry="30" transform="rotate(-22 154 110)" fill="#14111C"/>
+
+  <!-- Augen: .p-eye blinzelt (scaleY), .p-pupil folgt Maus/Finger (translate) -->
+  <g class="p-eye p-eye--l">
+    <circle class="p-eye__glow" cx="88" cy="108" r="24" fill="url(#pg-glow)"/>
+    <circle cx="88" cy="108" r="15" fill="url(#pg-iris)"/>
+    <g class="p-pupil">
+      <circle cx="88" cy="109" r="7" fill="#0A0A0F"/>
+      <circle cx="83" cy="102" r="4.5" fill="#FFFFFF"/>
+      <circle cx="93" cy="113" r="2" fill="#FFFFFF" opacity=".85"/>
+    </g>
+  </g>
+  <g class="p-eye p-eye--r">
+    <circle class="p-eye__glow" cx="152" cy="108" r="24" fill="url(#pg-glow)"/>
+    <circle cx="152" cy="108" r="15" fill="url(#pg-iris)"/>
+    <g class="p-pupil">
+      <circle cx="152" cy="109" r="7" fill="#0A0A0F"/>
+      <circle cx="147" cy="102" r="4.5" fill="#FFFFFF"/>
+      <circle cx="157" cy="113" r="2" fill="#FFFFFF" opacity=".85"/>
+    </g>
+  </g>
+
+  <!-- Bäckchen -->
+  <ellipse class="p-cheek p-cheek--l" cx="66" cy="142" rx="15" ry="9" fill="url(#pg-cheek)"/>
+  <ellipse class="p-cheek p-cheek--r" cx="174" cy="142" rx="15" ry="9" fill="url(#pg-cheek)"/>
+
+  <!-- Nase und Mund -->
+  <path class="p-nose" d="M113 128h14q0 6-7 8q-7-2-7-8Z" fill="#14111C" stroke="#14111C" stroke-width="2" stroke-linejoin="round"/>
+  <path class="p-mouth" d="M108 141q6 7 12 0q6 7 12 0" fill="none" stroke="#14111C" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

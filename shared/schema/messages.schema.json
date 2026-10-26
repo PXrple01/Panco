@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://panco.local/schema/messages.json",
+  "title": "Panco-Nachrichten",
+  "description": "JSON-Nachrichten zwischen dem PC (Gehirn) und seinen Oberflächen: Overlay (Tauri-IPC) und iPhone-PWA (WebSocket). Jede Nachricht hat ein Feld 'type'.",
+  "oneOf": [
+    { "$ref": "#/$defs/ClientMessage" },
+    { "$ref": "#/$defs/ServerMessage" }
+  ],
+  "$defs": {
+    "RequestId": { "type": "string", "minLength": 1, "maxLength": 64 },
+
+    "ClientMessage": {
+      "oneOf": [
+        { "$ref": "#/$defs/Command" },
+        { "$ref": "#/$defs/Invoke" },
+        { "$ref": "#/$defs/Confirm" }
+      ]
+    },
+    "Command": {
+      "description": "Freier Text (getippt oder transkribiert), wird vom Parser verstanden.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "text"],
+      "properties": {
+        "type": { "const": "command" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 500 }
+      }
+    },
+    "Invoke": {
+      "description": "Direkter Aufruf einer Katalog-Aktion (z. B. Schnellaktions-Kachel). Parameter werden gegen actions.json geprüft.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "action", "params"],
+      "properties": {
+        "type": { "const": "invoke" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "action": { "type": "string", "pattern": "^[a-z]+\\.[a-z_]+$" },
+        "params": { "type": "object" }
+      }
+    },
+    "Confirm": {
+      "description": "Antwort auf eine Bestätigungsanfrage.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "confirm_id", "accept"],
+      "properties": {
+        "type": { "const": "confirm" },
+        "confirm_id": { "$ref": "#/$defs/RequestId" },
+        "accept": { "type": "boolean" }
+      }
+    },
+
+    "ServerMessage": {
+      "oneOf": [
+        { "$ref": "#/$defs/Reply" },
+        { "$ref": "#/$defs/ConfirmRequest" },
+        { "$ref": "#/$defs/State" }
+      ]
+    },
+    "Mood": {
+      "description": "Avatar-Reaktion zur Antwort.",
+      "enum": ["success", "game", "confused", "error", "info"]
+    },
+    "Reply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "ok", "text", "mood"],
+      "properties": {
+        "type": { "const": "reply" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "ok": { "type": "boolean" },
+        "text": { "type": "string", "maxLength": 300 },
+        "mood": { "$ref": "#/$defs/Mood" },
+        "action": { "type": ["string", "null"] }
+      }
+    },
+    "ConfirmRequest": {
+      "description": "Panco braucht eine Bestätigung. pc_only = nur am PC per Klick bestätigbar (Stufe 3, Remote- oder Claude-Anfragen).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "confirm_id", "text", "tier", "expires_in_ms", "pc_only"],
+      "properties": {
+        "type": { "const": "confirm_request" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "confirm_id": { "$ref": "#/$defs/RequestId" },
+        "text": { "type": "string", "maxLength": 300 },
+        "tier": { "enum": [2, 3] },
+        "expires_in_ms": { "type": "integer", "minimum": 0 },
+        "pc_only": { "type": "boolean" }
+      }
+    },
+    "State": {
+      "description": "Zustand für Avatar und Statusanzeigen.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "avatar", "mic", "enabled"],
+      "properties": {
+        "type": { "const": "state" },
+        "avatar": { "enum": ["idle", "alert", "listening", "thinking", "sleeping"] },
+        "mic": { "enum": ["off", "wake", "recording", "muted"] },
+        "enabled": { "type": "boolean", "description": "false = Not-Aus aktiv" },
+        "level": { "type": "number", "minimum": 0, "maximum": 1, "description": "Mikrofonpegel während der Aufnahme" }
+      }
+    }
+  }
+}
