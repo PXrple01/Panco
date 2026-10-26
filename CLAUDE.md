@@ -46,7 +46,25 @@ Es gibt **keine freie Shell-Ausführung**. Alle Aktionen sind definierte, validi
   Claude-Modus und nur für diese eine Anfrage.
 - Code/Dateien lesen in freigegebenen Ordnern: Stufe 1. Bearbeiten: Stufe 2 mit Vorschau der Änderung (Diff),
   vorher wird eine Kopie im Papierkorb abgelegt (rückgängig machbar).
-- "Alles kontrollieren" heißt: viele gezielte Module, **weiterhin keine freie Shell**.
+- "Alles kontrollieren" heißt: gezielte Module **plus geprüfte Shell** – **keine freie Shell**.
+
+## Geprüfte Shell (Etappe 7)
+Für neue, ungewöhnliche Aufgaben darf Claude PowerShell-Skripte schreiben. Panco zerlegt jedes Skript
+vor dem Ausführen (AST) und stuft es ein:
+- **Nur lesen** → sofort. **Ändern in freigegebenen Ordnern** → sofort, vorher Kopie in den Papierkorb.
+- **Riskant** (Installieren, Registry, Löschen außerhalb, Netzwerk-Upload, Systemeinstellungen) → Rückfrage
+  am PC mit verständlicher Beschreibung. Vorher automatisch ein **Windows-Wiederherstellungspunkt**;
+  optional **Testlauf in der Windows Sandbox**, der zeigt, was sich ändern würde.
+- **Verboten:** verschleierter Code, nachgeladene Fremd-Skripte, alles nicht eindeutig Erkannte → wie "riskant".
+- Hat Panco in derselben Anfrage Bildschirm, Webseiten, Dateien oder Streams gelesen, darf ein Skript
+  **nur lesen** (Schutz vor eingeschleusten Befehlen).
+- Erfolgreiche Skripte bietet Panco als gespeicherten Befehl an → danach ohne Claude in < 1 s.
+
+## Tempo
+- Möglichst viel lokal im Parser lösen (ohne Claude). Whisper-Haltezeit einstellbar.
+- Claude: schnelles Modell, Streaming (Sprechen beginnt vor Antwortende).
+- Rückfragen pro Aktion abschaltbar und "10 Minuten nicht mehr fragen" (Etappe 6) – gilt nur für Befehle,
+  die ich selbst am PC gebe; für Claude/iPhone bleiben die strengen Regeln.
 
 ## Notizen
 - Markdown-Dateien im Notizen-Ordner. Sensible Titel (Passwort, Zugangsdaten, PIN, …) werden
@@ -116,9 +134,11 @@ Windows (`tools/measure.ps1`); Werte aus der Linux-Entwicklungsumgebung klar als
 5. **Zuverlässigkeit & Aktivierungs-Schutz:** Autostart + Wächter, Wake-Word-Sicherheit, Systemton-Abgleich,
    optionale Sprecherprüfung
 6. **Spiele, Medien, Gedächtnis & Makros:** Spiel-Erkennung + Game Mode + Spielzeit, Lautstärke pro App,
-   Spotify (optional Web-API), Kontext-Gedächtnis/Vorlieben-Regeln, eigene Befehle per Sprache (Einstellungsreiter)
-7. **Claude-Assistent:** Tool Use mit Stufen, Bildschirm/Fenster/Code lesen auf Anfrage (lokale OCR zuerst),
-   Code bearbeiten mit Diff + Bestätigung, Gedächtnis in natürlicher Sprache, Verlauf, Sprachausgabe
+   Spotify (optional Web-API), Kontext-Gedächtnis/Vorlieben-Regeln, eigene Befehle per Sprache (Einstellungsreiter),
+   Rückfragen pro Aktion abschaltbar
+7. **Claude-Assistent:** Tool Use mit Stufen, Streaming, Bildschirm/Fenster/Code lesen auf Anfrage (lokale OCR zuerst),
+   Code bearbeiten mit Diff + Bestätigung, geprüfte Shell (Wiederherstellungspunkt, Sandbox-Testlauf, gespeicherte
+   Befehle), Gedächtnis in natürlicher Sprache, Verlauf, Sprachausgabe
 8. **Tagesstart & Hinweise:** Guten-Morgen, Pausen-/Gesundheitserinnerungen, Nachrichten-Hinweise,
    Steam-Download-Wächter, Angebote der Wunschliste
 9. **PWA:** Oberfläche, Avatar, Kacheln, Installierbarkeit
