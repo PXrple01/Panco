@@ -122,6 +122,8 @@ fn main() {
             settings::set_overlay,
             settings::overlay_preview,
             settings::tts_preview,
+            settings::natural_download,
+            settings::natural_remove,
             settings::set_voice,
             settings::set_muted,
             settings::download_model,

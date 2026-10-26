@@ -1,10 +1,13 @@
-//! Sprachausgabe über die Windows-Stimmen (lokal, keine Cloud). Tonhöhe und Tempo sind einstellbar –
-//! Panco spricht standardmäßig etwas höher, passend zum Avatar.
+//! Sprachausgabe, lokal: natürliche Stimme (Piper, siehe `natural`) oder die Windows-Stimmen als
+//! Rückfall. Tonhöhe und Tempo sind einstellbar – Panco spricht etwas höher, passend zum Avatar.
 //! Läuft in einem eigenen Thread; ein neuer Satz und `stop()` brechen den laufenden sofort ab
-//! (Dazwischenreden bei Rückfragen).
+//! (Dazwischenreden bei Rückfragen). Die natürliche Stimme spricht Satz für Satz: Der erste Satz
+//! spielt schon, während der nächste entsteht.
 
+use crate::natural::{self, Piper};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
@@ -18,11 +21,24 @@ pub struct TtsSettings {
     pub pitch: f32,
     /// 0.5 … 2.0, 1.0 = normal
     pub rate: f32,
+    /// Natürliche Stimme (piper + Stimmdatei); `None` = Windows-Stimme.
+    pub natural: Option<Natural>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Natural {
+    pub exe: PathBuf,
+    pub model: PathBuf,
+    /// 0.7 … 1.6 (höher = heller)
+    pub pitch: f32,
+    pub rate: f32,
+    /// So lange bleibt die Stimme nach dem letzten Satz geladen.
+    pub keep_secs: u64,
 }
 
 impl Default for TtsSettings {
     fn default() -> Self {
-        Self { voice: String::new(), pitch: 1.0, rate: 1.0 }
+        Self { voice: String::new(), pitch: 1.0, rate: 1.0, natural: None }
     }
 }
 
@@ -59,29 +75,23 @@ impl Speaker {
         let stop = Arc::new(Stop::default());
         let (sp, st) = (speaking.clone(), stop.clone());
         let spawned = std::thread::Builder::new().name("panco-tts".into()).spawn(move || {
-            let mut voice = imp::Voice::new();
-            for cmd in rx {
-                match cmd {
-                    Cmd::Configure(s) => {
-                        if let Some(v) = voice.as_mut() {
-                            v.configure(&s);
-                        }
+            let mut out = Output::default();
+            loop {
+                // Ohne Auftrag: nach der Haltezeit die natürliche Stimme beenden (Speicher frei).
+                let cmd = match rx.recv_timeout(out.keep()) {
+                    Ok(cmd) => cmd,
+                    Err(RecvTimeoutError::Timeout) => {
+                        out.piper = None;
+                        continue;
                     }
+                    Err(RecvTimeoutError::Disconnected) => break,
+                };
+                match cmd {
+                    Cmd::Configure(s) => out.configure(s),
                     Cmd::Say(text, done) => {
                         *st.stopped.lock().unwrap() = false;
                         sp.store(true, Ordering::Relaxed);
-                        if let Some(v) = voice.as_mut() {
-                            match v.start(&text) {
-                                // Warten, bis der Satz zu Ende ist oder abgebrochen wird.
-                                Ok(len) => {
-                                    let guard = st.stopped.lock().unwrap();
-                                    let _ = st.cv.wait_timeout_while(guard, len + Duration::from_millis(250), |s| !*s);
-                                }
-                                Err(e) => eprintln!("[panco] Sprachausgabe: {e}"),
-                            }
-                            // Erst stoppen, dann den Puffer freigeben (die Wiedergabe liest daraus).
-                            v.finish();
-                        }
+                        out.say(&text, &st);
                         sp.store(false, Ordering::Relaxed);
                         if let Some(done) = done {
                             done();
@@ -128,6 +138,114 @@ impl Speaker {
     }
 }
 
+/// Zustand des TTS-Threads.
+#[derive(Default)]
+struct Output {
+    settings: TtsSettings,
+    /// Windows-Stimme, erst beim ersten Gebrauch erzeugt.
+    windows: Option<imp::Voice>,
+    piper: Option<Piper>,
+    /// WAV im Speicher, solange die Wiedergabe daraus liest.
+    playing: Option<Vec<u8>>,
+}
+
+impl Output {
+    fn keep(&self) -> Duration {
+        match (&self.piper, &self.settings.natural) {
+            (Some(_), Some(n)) => Duration::from_secs(n.keep_secs.max(5)),
+            _ => Duration::from_secs(3600),
+        }
+    }
+
+    fn configure(&mut self, s: TtsSettings) {
+        if s.natural != self.settings.natural {
+            self.piper = None;
+        }
+        if let Some(v) = self.windows.as_mut() {
+            v.configure(&s);
+        }
+        self.settings = s;
+    }
+
+    /// Spielt eine WAV ab und wartet, bis sie zu Ende ist oder abgebrochen wird.
+    /// `next` läuft währenddessen (nächsten Satz erzeugen). Liefert `false` nach Abbruch.
+    fn play<T>(&mut self, wav: Vec<u8>, stop: &Stop, next: impl FnOnce(&mut Self) -> T) -> (bool, T) {
+        let len = wav_duration(&wav).unwrap_or_default();
+        let started = std::time::Instant::now();
+        if let Err(e) = imp::play(&wav) {
+            eprintln!("[panco] Wiedergabe: {e}");
+        }
+        self.playing = Some(wav);
+        let upcoming = next(self);
+        let rest = (len + Duration::from_millis(120)).saturating_sub(started.elapsed());
+        let guard = stop.stopped.lock().unwrap();
+        let (guard, _) = stop.cv.wait_timeout_while(guard, rest, |s| !*s).unwrap();
+        let stopped = *guard;
+        drop(guard);
+        // Erst stoppen, dann den Puffer freigeben (die Wiedergabe liest daraus).
+        imp::stop();
+        self.playing = None;
+        (!stopped, upcoming)
+    }
+
+    fn say(&mut self, text: &str, stop: &Stop) {
+        if self.settings.natural.is_some() {
+            match self.say_natural(text, stop) {
+                Ok(()) => return,
+                Err(e) => {
+                    // Rückfall: Windows-Stimme, damit Panco nie stumm bleibt.
+                    eprintln!("[panco] natürliche Stimme: {e} – nehme die Windows-Stimme");
+                    self.piper = None;
+                    if *stop.stopped.lock().unwrap() {
+                        return;
+                    }
+                }
+            }
+        }
+        if self.windows.is_none() {
+            self.windows = imp::Voice::new();
+            if let Some(v) = self.windows.as_mut() {
+                v.configure(&self.settings);
+            }
+        }
+        let Some(v) = self.windows.as_mut() else { return };
+        match v.synth(text) {
+            Ok(wav) => {
+                self.play(wav, stop, |_| ());
+            }
+            Err(e) => eprintln!("[panco] Sprachausgabe: {e}"),
+        }
+    }
+
+    fn say_natural(&mut self, text: &str, stop: &Stop) -> Result<(), String> {
+        let n = self.settings.natural.clone().ok_or("aus")?;
+        if self.piper.as_mut().is_some_and(|p| !p.alive()) {
+            self.piper = None;
+        }
+        if self.piper.is_none() {
+            self.piper = Some(Piper::start(&n.exe, &n.model, n.pitch, n.rate)?);
+        }
+        let parts = natural::sentences(text);
+        let mut iter = parts.iter();
+        let Some(first) = iter.next() else { return Ok(()) };
+        let mut wav = self.piper.as_mut().ok_or("aus")?.synth(first)?;
+        loop {
+            let following = iter.next();
+            let (go_on, upcoming) = self.play(wav, stop, |me| following.map(|s| me.piper.as_mut().map(|p| p.synth(s))));
+            match upcoming {
+                Some(Some(Ok(next))) if go_on => wav = next,
+                Some(Some(Err(e))) if go_on => {
+                    // Mitten im Text nicht von vorn mit der anderen Stimme anfangen.
+                    eprintln!("[panco] natürliche Stimme: {e}");
+                    self.piper = None;
+                    return Ok(());
+                }
+                _ => return Ok(()),
+            }
+        }
+    }
+}
+
 impl Default for Speaker {
     fn default() -> Self {
         Self::new()
@@ -142,7 +260,6 @@ pub fn voices() -> Vec<VoiceInfo> {
 }
 
 /// Dauer einer WAV-Datei aus dem Kopf (Bytes pro Sekunde + Größe des Datenblocks).
-#[cfg_attr(not(windows), allow(dead_code))]
 fn wav_duration(wav: &[u8]) -> Option<Duration> {
     if wav.len() < 12 || &wav[0..4] != b"RIFF" || &wav[8..12] != b"WAVE" {
         return None;
@@ -165,7 +282,6 @@ fn wav_duration(wav: &[u8]) -> Option<Duration> {
 #[cfg(windows)]
 mod imp {
     use super::{TtsSettings, VoiceInfo};
-    use std::time::Duration;
     use windows::core::{HSTRING, PCWSTR};
     use windows::Media::SpeechSynthesis::{SpeechSynthesizer, VoiceGender, VoiceInformation};
     use windows::Storage::Streams::DataReader;
@@ -174,8 +290,6 @@ mod imp {
 
     pub struct Voice {
         synth: SpeechSynthesizer,
-        /// WAV im Speicher, solange PlaySound daraus liest.
-        playing: Option<Vec<u8>>,
     }
 
     fn all() -> Vec<VoiceInformation> {
@@ -215,7 +329,7 @@ mod imp {
                 let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
             }
             let synth = SpeechSynthesizer::new().ok()?;
-            let mut v = Voice { synth, playing: None };
+            let mut v = Voice { synth };
             v.configure(&TtsSettings::default());
             Some(v)
         }
@@ -230,8 +344,8 @@ mod imp {
             }
         }
 
-        /// Erzeugt den Satz und startet die Wiedergabe. Liefert die Dauer.
-        pub fn start(&mut self, text: &str) -> Result<Duration, String> {
+        /// Erzeugt den Text als WAV im Speicher.
+        pub fn synth(&mut self, text: &str) -> Result<Vec<u8>, String> {
             let err = |e: windows::core::Error| e.message().to_string();
             let stream =
                 self.synth.SynthesizeTextToStreamAsync(&HSTRING::from(text)).map_err(err)?.join().map_err(err)?;
@@ -240,31 +354,34 @@ mod imp {
             reader.LoadAsync(size).map_err(err)?.join().map_err(err)?;
             let mut wav = vec![0u8; size as usize];
             reader.ReadBytes(&mut wav).map_err(err)?;
-            let len = super::wav_duration(&wav).ok_or("unbekanntes Audioformat")?;
-            let ok =
-                unsafe { PlaySoundW(PCWSTR(wav.as_ptr() as *const u16), None, SND_MEMORY | SND_ASYNC | SND_NODEFAULT) };
-            self.playing = Some(wav);
-            if !ok.as_bool() {
-                return Err("Wiedergabe nicht möglich".into());
-            }
-            Ok(len)
+            Ok(wav)
         }
+    }
 
-        /// Stoppt die Wiedergabe (synchron) und gibt den Puffer frei.
-        pub fn finish(&mut self) {
-            if self.playing.take().is_some() {
-                unsafe {
-                    let _ = PlaySoundW(PCWSTR::null(), None, SND_FLAGS(0));
-                }
-            }
+    /// Startet die Wiedergabe (asynchron). Der Puffer muss bis `stop()` leben.
+    pub fn play(wav: &[u8]) -> Result<(), String> {
+        let ok =
+            unsafe { PlaySoundW(PCWSTR(wav.as_ptr() as *const u16), None, SND_MEMORY | SND_ASYNC | SND_NODEFAULT) };
+        if ok.as_bool() {
+            Ok(())
+        } else {
+            Err("Wiedergabe nicht möglich".into())
+        }
+    }
+
+    /// Stoppt die Wiedergabe (synchron).
+    pub fn stop() {
+        unsafe {
+            let _ = PlaySoundW(PCWSTR::null(), None, SND_FLAGS(0));
         }
     }
 }
 
+/// Entwicklung unter Linux: keine Windows-Stimme, keine Wiedergabe (die natürliche Stimme wird
+/// trotzdem erzeugt, damit sich Tempo und Speicher messen lassen).
 #[cfg(not(windows))]
 mod imp {
     use super::{TtsSettings, VoiceInfo};
-    use std::time::Duration;
 
     pub struct Voice;
     impl Voice {
@@ -272,20 +389,55 @@ mod imp {
             None
         }
         pub fn configure(&mut self, _: &TtsSettings) {}
-        pub fn start(&mut self, _: &str) -> Result<Duration, String> {
-            Ok(Duration::ZERO)
+        pub fn synth(&mut self, _: &str) -> Result<Vec<u8>, String> {
+            Err("keine Windows-Stimme".into())
         }
-        pub fn finish(&mut self) {}
     }
 
     pub fn voices() -> Vec<VoiceInfo> {
         vec![]
     }
+    pub fn play(_: &[u8]) -> Result<(), String> {
+        Ok(())
+    }
+    pub fn stop() {}
 }
 
 #[cfg(test)]
 mod tests {
-    use super::wav_duration;
+    use super::*;
+
+    /// Natürliche Stimme Satz für Satz; danach Rückmeldung, Stimme bleibt bis zur Haltezeit geladen.
+    #[cfg(unix)]
+    #[test]
+    fn speaks_sentences_with_natural_voice() {
+        let (dir, exe, model) = crate::natural::tests::fake_piper("speaker");
+        let speaker = Speaker::new();
+        speaker.configure(TtsSettings {
+            natural: Some(Natural { exe, model, pitch: 1.0, rate: 1.0, keep_secs: 5 }),
+            ..TtsSettings::default()
+        });
+        let (tx, rx) = channel();
+        let started = std::time::Instant::now();
+        speaker.say(
+            "Das ist der erste lange Satz. Und hier kommt der zweite Satz. Und noch ein dritter Satz!",
+            Some(Box::new(move || tx.send(()).unwrap())),
+        );
+        rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        // drei Sätze à 0,1 s (+ kleine Pause) – kein Abbruch, kein Rückfall
+        assert!(started.elapsed() >= Duration::from_millis(300), "{:?}", started.elapsed());
+        assert!(!speaker.is_speaking());
+
+        // Abbruch mitten im Text
+        let (tx, rx) = channel();
+        speaker.say(
+            "Erster Satz zum Abbrechen hier. Zweiter Satz zum Abbrechen.",
+            Some(Box::new(move || tx.send(()).unwrap())),
+        );
+        speaker.stop();
+        rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn wav_length_from_header() {

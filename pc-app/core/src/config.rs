@@ -100,6 +100,14 @@ pub struct VoiceSettings {
     pub tts_pitch: f32,
     /// Sprechtempo 0.5 … 2.0 (1.0 = normal)
     pub tts_rate: f32,
+    /// Natürliche Stimme (Piper, lokal): "kerstin", "ramona", "eva", "thorsten"; leer = Windows-Stimme
+    pub natural_voice: String,
+    /// Tonhöhe der natürlichen Stimme 0.7 … 1.6
+    pub natural_pitch: f32,
+    /// Tempo der natürlichen Stimme 0.5 … 2.0
+    pub natural_rate: f32,
+    /// So lange bleibt die natürliche Stimme nach dem Sprechen geladen.
+    pub natural_keep_secs: u64,
     /// Bei Rückfragen schon zuhören, während Panco noch spricht
     pub barge_in: bool,
     /// "Panco" aus Lautsprechern/Stream ignorieren (Systemton-Abgleich)
@@ -121,6 +129,10 @@ impl Default for VoiceSettings {
             tts_voice: String::new(),
             tts_pitch: 1.4,
             tts_rate: 1.1,
+            natural_voice: String::new(),
+            natural_pitch: 1.15,
+            natural_rate: 1.05,
+            natural_keep_secs: 60,
             barge_in: true,
             loopback_check: true,
             speaker_check: false,
@@ -321,6 +333,11 @@ pub fn data_dir() -> PathBuf {
 
 pub fn models_dir() -> PathBuf {
     data_dir().join("models")
+}
+
+/// Natürliche Stimmen (Piper-Laufzeit + Stimmdateien).
+pub fn voices_dir() -> PathBuf {
+    data_dir().join("stimmen")
 }
 
 /// Wake-Word-Merkmale (keine Audiodaten).

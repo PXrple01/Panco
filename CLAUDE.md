@@ -20,7 +20,8 @@ Diese Regeln sind verbindlich. Im Zweifel gilt: sicher und sparsam vor bequem.
 - Im Game Mode bleibt das Wake-Word an; CPU-Last wird gemessen und berichtet.
 - Bei Rückfragen darf ich dazwischenreden (Panco hört schon zu, während er spricht); Pancos eigene
   Stimme aus den Lautsprechern wird erkannt und ignoriert.
-- Stimme: süß/hell passend zum Avatar (Windows-Stimme mit höherer Tonhöhe); Stimme, Tonhöhe, Tempo einstellbar.
+- Stimme: süß/hell passend zum Avatar. Standard nach dem Laden: **natürliche Stimme (Piper, lokal)**, nur zum
+  Sprechen geladen (Haltezeit, dann freigegeben); Windows-Stimme bleibt Rückfall. Stimme, Tonhöhe, Tempo einstellbar.
 
 ## Overlay
 - Bei "Panco, …" nur **Mini-Panco**: kleines Icon + erkannter Text, keine große Karte. Die volle Karte mit

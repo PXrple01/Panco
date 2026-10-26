@@ -18,6 +18,9 @@ interface VoiceSettings {
   tts_voice: string;
   tts_pitch: number;
   tts_rate: number;
+  natural_voice: string;
+  natural_pitch: number;
+  natural_rate: number;
   barge_in: boolean;
   loopback_check: boolean;
   speaker_check: boolean;
@@ -54,6 +57,7 @@ interface Appearance {
   overlay: OverlayConfig;
   monitors: { name: string; label: string }[];
   voices: { name: string; language: string; female: boolean }[];
+  natural: NaturalRow[];
 }
 
 interface Status {
@@ -90,7 +94,16 @@ const MIC: Record<Status["mic"], string> = {
   muted: "stumm",
 };
 
+interface NaturalRow {
+  id: string;
+  label: string;
+  female: boolean;
+  size: number;
+  installed: boolean;
+}
+
 let voice: VoiceSettings | null = null;
+let naturalRows: NaturalRow[] = [];
 let downloading: string | null = null;
 let modelsKey = "";
 let pollTimer = 0;
@@ -218,10 +231,7 @@ function render(s: Status) {
     $("th-val").textContent = fmt(s.voice.wake_threshold, 2);
     $<HTMLInputElement>("speak").checked = s.voice.speak_replies;
     $<HTMLInputElement>("barge").checked = s.voice.barge_in;
-    $<HTMLInputElement>("tts-pitch").value = String(s.voice.tts_pitch);
-    $("tts-pitch-val").textContent = `${Math.round(s.voice.tts_pitch * 100)} %`;
-    $<HTMLInputElement>("tts-rate").value = String(s.voice.tts_rate);
-    $("tts-rate-val").textContent = `${Math.round(s.voice.tts_rate * 100)} %`;
+    syncSliders();
     $<HTMLInputElement>("overlay").checked = s.voice.show_overlay;
     $<HTMLInputElement>("keep").value = String(s.voice.keep_model_secs);
   }
@@ -261,10 +271,91 @@ $<HTMLInputElement>("threshold").addEventListener("input", (e) => {
 $<HTMLInputElement>("threshold").addEventListener("change", (e) => save({ wake_threshold: Number((e.target as HTMLInputElement).value) }));
 $<HTMLInputElement>("speak").addEventListener("change", (e) => save({ speak_replies: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>("barge").addEventListener("change", (e) => save({ barge_in: (e.target as HTMLInputElement).checked }));
-for (const [id, key] of [["tts-pitch", "tts_pitch"], ["tts-rate", "tts_rate"]] as const) {
+// Tonhöhe/Tempo gehören zur gerade gewählten Stimme (natürlich oder Windows).
+const natural = () => !!voice?.natural_voice;
+function syncSliders() {
+  if (!voice) return;
+  const pitch = $<HTMLInputElement>("tts-pitch");
+  const rate = $<HTMLInputElement>("tts-rate");
+  // Bei der natürlichen Stimme klingt mehr als ±50 % Tonhöhe nach Comic.
+  [pitch.min, pitch.max] = natural() ? ["0.8", "1.5"] : ["0.5", "2"];
+  pitch.value = String(natural() ? voice.natural_pitch : voice.tts_pitch);
+  rate.value = String(natural() ? voice.natural_rate : voice.tts_rate);
+  $("tts-pitch-val").textContent = `${Math.round(Number(pitch.value) * 100)} %`;
+  $("tts-rate-val").textContent = `${Math.round(Number(rate.value) * 100)} %`;
+  $("tts-windows").hidden = natural();
+}
+for (const [id, key] of [["tts-pitch", "pitch"], ["tts-rate", "rate"]] as const) {
   const el = $<HTMLInputElement>(id);
   el.addEventListener("input", () => ($(`${id}-val`).textContent = `${Math.round(Number(el.value) * 100)} %`));
-  el.addEventListener("change", () => save({ [key]: Number(el.value) }));
+  el.addEventListener("change", () => save({ [natural() ? `natural_${key}` : `tts_${key}`]: Number(el.value) }));
+}
+
+function renderNatural() {
+  const list = $("natural-list");
+  const current = voice?.natural_voice ?? "";
+  const row = (id: string, label: string, installed: boolean) => {
+    const li = document.createElement("li");
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "natural";
+    radio.checked = current === id;
+    radio.disabled = !installed;
+    radio.addEventListener("change", async () => {
+      await save({ natural_voice: id });
+      syncSliders();
+      invoke("tts_preview");
+    });
+    const text = document.createElement("span");
+    text.textContent = label;
+    li.append(radio, text);
+    return li;
+  };
+  const items = [row("", "Windows-Stimme – sofort da, klingt nach Computer", true)];
+  for (const v of naturalRows) {
+    const li = row(v.id, v.label, v.installed);
+    const key = `stimme-${v.id}`;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn--small";
+    if (v.installed) {
+      btn.textContent = "Entfernen";
+      btn.addEventListener("click", async () => {
+        try {
+          naturalRows = await invoke<NaturalRow[]>("natural_remove", { id: v.id });
+          if (voice?.natural_voice === v.id) voice.natural_voice = "";
+          syncSliders();
+          renderNatural();
+        } catch (e) {
+          showError(String(e));
+        }
+      });
+    } else {
+      btn.textContent = downloading === key ? "lädt …" : "Laden";
+      btn.disabled = downloading !== null;
+      btn.addEventListener("click", async () => {
+        downloading = key;
+        renderNatural();
+        try {
+          await invoke("natural_download", { id: v.id });
+        } catch (e) {
+          downloading = null;
+          showError(String(e));
+          renderNatural();
+        }
+      });
+    }
+    li.append(btn);
+    if (downloading === key) {
+      const bar = document.createElement("progress");
+      bar.id = `progress-${key}`;
+      bar.max = 1;
+      bar.value = 0;
+      li.append(bar);
+    }
+    items.push(li);
+  }
+  list.replaceChildren(...items);
 }
 $<HTMLSelectElement>("tts-voice").addEventListener("change", (e) => save({ tts_voice: (e.target as HTMLSelectElement).value }));
 $("tts-preview").addEventListener("click", async () => {
@@ -309,6 +400,9 @@ async function loadLook() {
   $("ov-scale-val").textContent = `${Math.round(look.scale * 100)} %`;
   $<HTMLInputElement>("ov-hide").value = String(look.auto_hide_ms / 1000);
   $<HTMLInputElement>("ov-reduce").checked = look.reduce_motion;
+  naturalRows = a.natural;
+  renderNatural();
+  syncSliders();
   const current = voice?.tts_voice ?? "";
   $<HTMLSelectElement>("tts-voice").replaceChildren(
     option("", "Automatisch (deutsche Frauenstimme)", current === ""),
@@ -343,7 +437,12 @@ listen<{ id: string; done: number; total: number; finished: boolean; error: stri
     downloading = null;
     modelsKey = "";
     showError(d.error);
-    refresh();
+    if (d.id.startsWith("stimme-")) {
+      // Neue Stimme ist gleich aktiv (macht die App) – Formular neu laden.
+      voice = null;
+      loadLook().catch(() => {});
+      if (!d.error) window.setTimeout(() => invoke("tts_preview"), 400);
+    } else refresh();
   }
 });
 

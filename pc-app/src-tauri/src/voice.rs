@@ -2,10 +2,11 @@
 //! Sprachausgabe, Rückfragen per Stimme.
 
 use crate::{overlay, tray};
-use panco_core::config::{models_dir, wakeword_path, SttChoice, VoiceMode};
+use panco_core::config::{models_dir, voices_dir, wakeword_path, SttChoice, VoiceMode};
 use panco_core::protocol::{AvatarState, MicState, ServerMessage};
 use panco_core::{Engine, Source};
-use panco_voice::tts::{Speaker, TtsSettings};
+use panco_voice::natural;
+use panco_voice::tts::{Natural, Speaker, TtsSettings};
 use panco_voice::{model, Ctl, Event, Mode, Purpose, SttEngine, VoiceConfig, VoiceService};
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -56,7 +57,16 @@ pub fn apply(app: &AppHandle) {
     let muted = v.muted.load(Ordering::Relaxed);
     v.svc.send(Ctl::Config(build_config(app, muted)));
     let s = crate::engine(app).config().voice;
-    v.speaker.configure(TtsSettings { voice: s.tts_voice, pitch: s.tts_pitch, rate: s.tts_rate });
+    // Natürliche Stimme nur, wenn sie vollständig geladen ist – sonst die Windows-Stimme.
+    let dir = voices_dir();
+    let natural = (!s.natural_voice.is_empty() && natural::installed(&dir, &s.natural_voice)).then(|| Natural {
+        exe: natural::exe_path(&dir),
+        model: natural::model_path(&dir, &s.natural_voice).unwrap_or_default(),
+        pitch: s.natural_pitch,
+        rate: s.natural_rate,
+        keep_secs: s.natural_keep_secs.clamp(5, 3600),
+    });
+    v.speaker.configure(TtsSettings { voice: s.tts_voice, pitch: s.tts_pitch, rate: s.tts_rate, natural });
     tray::refresh(app);
 }
 

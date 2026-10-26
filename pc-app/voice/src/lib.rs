@@ -7,12 +7,13 @@
 //! - `loopback`  Systemton-Abgleich (kam "Panco" aus den Lautsprechern?)
 //! - `speaker`   optionale Sprecherprüfung (Stimmprofil aus den Wake-Word-Proben)
 //! - `stt`       whisper.cpp, Modell auf Abruf; `stt_windows` als Vergleich
-//! - `tts`       Windows-Sprachausgabe (Tonhöhe/Tempo einstellbar)
+//! - `tts`       Sprachausgabe: Windows-Stimmen oder `natural` (Piper, lokal, auf Abruf)
 //! - `pipeline`  Zustandsautomat, eigener Thread
 
 pub mod capture;
 pub mod loopback;
 pub mod model;
+pub mod natural;
 mod pipeline;
 pub mod resample;
 pub mod speaker;

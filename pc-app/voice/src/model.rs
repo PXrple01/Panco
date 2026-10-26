@@ -51,19 +51,34 @@ pub fn path(dir: &Path, id: &str) -> PathBuf {
 
 /// Lädt ein Modell herunter (`.part`-Datei, Prüfsumme, dann umbenennen).
 /// `progress(geladen, gesamt)` wird ca. alle 256 KB aufgerufen.
-pub fn download(id: &str, dir: &Path, mut progress: impl FnMut(u64, u64)) -> Result<PathBuf, String> {
+pub fn download(id: &str, dir: &Path, progress: impl FnMut(u64, u64)) -> Result<PathBuf, String> {
     let m = info(id).ok_or("unbekanntes Modell")?;
-    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let target = dir.join(m.file);
-    let part = dir.join(format!("{}.part", m.file));
+    fetch(&format!("{BASE_URL}{}", m.file), m.size, m.sha256, &target, progress)?;
+    Ok(target)
+}
+
+/// Eine Datei herunterladen und nur bei passender SHA-256-Prüfsumme behalten.
+pub fn fetch(
+    url: &str,
+    size: u64,
+    sha256: &str,
+    target: &Path,
+    mut progress: impl FnMut(u64, u64),
+) -> Result<(), String> {
+    if let Some(dir) = target.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let mut part = target.as_os_str().to_owned();
+    part.push(".part");
+    let part = PathBuf::from(part);
 
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .tls_config(ureq::tls::TlsConfig::builder().root_certs(ureq::tls::RootCerts::PlatformVerifier).build())
         .build()
         .into();
-    let mut resp =
-        agent.get(&format!("{BASE_URL}{}", m.file)).call().map_err(|e| format!("Download fehlgeschlagen: {e}"))?;
-    let mut reader = resp.body_mut().with_config().limit(m.size + 1024).reader();
+    let mut resp = agent.get(url).call().map_err(|e| format!("Download fehlgeschlagen: {e}"))?;
+    let mut reader = resp.body_mut().with_config().limit(size + 1024).reader();
     let mut file = std::fs::File::create(&part).map_err(|e| e.to_string())?;
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 256 * 1024];
@@ -76,14 +91,13 @@ pub fn download(id: &str, dir: &Path, mut progress: impl FnMut(u64, u64)) -> Res
         hasher.update(&buf[..n]);
         file.write_all(&buf[..n]).map_err(|e| e.to_string())?;
         done += n as u64;
-        progress(done, m.size);
+        progress(done, size);
     }
     drop(file);
     let hash: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
-    if hash != m.sha256 {
+    if hash != sha256 {
         let _ = std::fs::remove_file(&part);
         return Err("Prüfsumme stimmt nicht – Datei verworfen".into());
     }
-    std::fs::rename(&part, &target).map_err(|e| e.to_string())?;
-    Ok(target)
+    std::fs::rename(&part, target).map_err(|e| e.to_string())
 }

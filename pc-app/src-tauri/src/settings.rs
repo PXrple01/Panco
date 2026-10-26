@@ -131,6 +131,11 @@ pub fn set_voice(app: AppHandle, settings: VoiceSettings) -> Result<(), String> 
     if model::info(&settings.model).is_none() {
         return Err("unbekanntes Modell".into());
     }
+    if !settings.natural_voice.is_empty()
+        && !panco_voice::natural::installed(&panco_core::config::voices_dir(), &settings.natural_voice)
+    {
+        return Err("Diese Stimme ist noch nicht geladen.".into());
+    }
     let engine = crate::engine(&app);
     let mut cfg = engine.config();
     cfg.voice = settings;
@@ -187,10 +192,75 @@ pub fn train_cancel(app: AppHandle) {
 }
 
 #[derive(Serialize)]
+pub struct NaturalRow {
+    #[serde(flatten)]
+    voice: panco_voice::natural::NaturalVoice,
+    installed: bool,
+}
+
+#[derive(Serialize)]
 pub struct Appearance {
     overlay: OverlayConfig,
     monitors: Vec<overlay::MonitorInfo>,
     voices: Vec<panco_voice::tts::VoiceInfo>,
+    natural: Vec<NaturalRow>,
+}
+
+fn natural_rows() -> Vec<NaturalRow> {
+    let dir = panco_core::config::voices_dir();
+    panco_voice::natural::VOICES
+        .iter()
+        .map(|v| NaturalRow { voice: *v, installed: panco_voice::natural::installed(&dir, v.id) })
+        .collect()
+}
+
+/// Natürliche Stimme laden (Laufzeit beim ersten Mal mit) – nur auf Klick, mit Prüfsummen.
+/// Fortschritt wie beim Whisper-Modell über "panco://download" (id "stimme-<id>").
+#[tauri::command]
+pub fn natural_download(app: AppHandle, id: String) -> Result<(), String> {
+    panco_voice::natural::voice(&id).ok_or("unbekannte Stimme")?;
+    std::thread::spawn(move || {
+        let key = format!("stimme-{id}");
+        let mut last_emit = Instant::now();
+        let result = panco_voice::natural::install(&panco_core::config::voices_dir(), &id, |done, total| {
+            if last_emit.elapsed().as_millis() > 200 {
+                last_emit = Instant::now();
+                let _ = app.emit_to(
+                    LABEL,
+                    "panco://download",
+                    Progress { id: key.clone(), done, total, finished: false, error: None },
+                );
+            }
+        });
+        let error = result.err();
+        if error.is_none() {
+            // Frisch geladene Stimme gleich benutzen.
+            let engine = crate::engine(&app);
+            let mut cfg = engine.config();
+            cfg.voice.natural_voice = id.clone();
+            if cfg.save(&config_path()).is_ok() {
+                engine.set_config(cfg);
+                voice::apply(&app);
+            }
+            engine.log_system("done", &format!("Natürliche Stimme „{id}“ geladen"));
+        }
+        let _ = app.emit_to(LABEL, "panco://download", Progress { id: key, done: 0, total: 0, finished: true, error });
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub fn natural_remove(app: AppHandle, id: String) -> Result<Vec<NaturalRow>, String> {
+    let engine = crate::engine(&app);
+    let mut cfg = engine.config();
+    if cfg.voice.natural_voice == id {
+        cfg.voice.natural_voice.clear();
+        cfg.save(&config_path()).map_err(|e| e.to_string())?;
+        engine.set_config(cfg);
+        voice::apply(&app); // beendet die laufende Stimme, bevor die Datei weg ist
+    }
+    panco_voice::natural::remove(&panco_core::config::voices_dir(), &id)?;
+    Ok(natural_rows())
 }
 
 /// Reiter "Aussehen & Stimme": Overlay-Einstellungen, Bildschirme, installierte Stimmen.
@@ -200,6 +270,7 @@ pub async fn appearance(app: AppHandle) -> Appearance {
         overlay: crate::engine(&app).config().overlay,
         monitors: overlay::monitors(&app),
         voices: tauri::async_runtime::spawn_blocking(panco_voice::tts::voices).await.unwrap_or_default(),
+        natural: natural_rows(),
     }
 }
 
