@@ -90,7 +90,14 @@ struct Pending {
     pc_only: bool,
     created: Instant,
     kind: PendingKind,
+    /// Claude wartet auf diese Entscheidung (Ergebnis wird zusätzlich hierhin geschickt).
+    waiter: Option<std::sync::mpsc::Sender<ServerMessage>>,
 }
+
+/// Diese Aktionen bringen fremde Inhalte (Bildschirm, Dateien, Zwischenablage …) in eine
+/// Claude-Anfrage. Danach dürfen Skripte in derselben Anfrage nur noch lesen.
+const TAINTING: [&str; 7] =
+    ["screen.read", "screen.look", "clipboard.read", "file.read", "file.search", "note.read", "note.search"];
 
 /// Was zu einer Anfrage für Antwort und Protokoll gebraucht wird.
 struct Meta {
@@ -118,6 +125,8 @@ pub struct Engine {
     last: Mutex<Option<(String, Value)>>,
     /// "10 Minuten nicht mehr fragen": bis dahin laufen Stufe-2-Befehle vom PC ohne Rückfrage.
     quiet_until: Mutex<Option<Instant>>,
+    /// In der laufenden Claude-Anfrage wurden fremde Inhalte gelesen (siehe `TAINTING`).
+    tainted: AtomicBool,
 }
 
 impl Engine {
@@ -135,6 +144,7 @@ impl Engine {
             play: Mutex::new(None),
             last: Mutex::new(None),
             quiet_until: Mutex::new(None),
+            tainted: AtomicBool::new(false),
         }
     }
 
@@ -368,49 +378,97 @@ impl Engine {
             drop(slot);
             return self.reply_fail(confirm_id.unwrap_or("-"), t("nothing_to_confirm", &[]), Mood::Confused);
         }
-        let p = slot.take().unwrap();
-
-        let timeout = Duration::from_secs(self.config.read().unwrap().confirm_timeout_secs);
-        if p.created.elapsed() > timeout {
-            drop(slot);
-            self.log_meta(&p.meta, "expired", "", None, None);
-            return self.reply_fail(&p.meta.request_id, t("confirm_expired", &[]), Mood::Info);
-        }
+        let mut p = slot.take().unwrap();
 
         // Darf diese Antwortart diese Frage beantworten?
+        let timeout = Duration::from_secs(self.config.read().unwrap().confirm_timeout_secs);
         let allowed = match via {
             ConfirmVia::PcClick => true,
             ConfirmVia::Spoken => !p.pc_only,
             ConfirmVia::Remote => matches!(p.kind, PendingKind::Clarify { .. }) && p.meta.source.is_remote(),
         };
-        if !allowed {
+        if !allowed && p.created.elapsed() <= timeout {
             let id = p.meta.request_id.clone();
             *slot = Some(p); // Frage bleibt offen
             return self.reply_fail(&id, t("pc_confirm_needed", &[]), Mood::Info);
         }
         drop(slot);
 
-        if !self.enabled() {
-            return self.reply_fail(&p.meta.request_id, t("disabled", &[]), Mood::Error);
-        }
-        if !accept {
+        let waiter = p.waiter.take();
+        let result = if p.created.elapsed() > timeout {
+            self.log_meta(&p.meta, "expired", "", None, None);
+            self.reply_fail(&p.meta.request_id, t("confirm_expired", &[]), Mood::Info)
+        } else if !self.enabled() {
+            self.reply_fail(&p.meta.request_id, t("disabled", &[]), Mood::Error)
+        } else if !accept {
             self.log_meta(&p.meta, "cancelled", "", None, None);
             let action = p.meta.action.clone();
-            return ServerMessage::reply(
-                &p.meta.request_id,
-                true,
-                t("confirm_cancelled", &[]),
-                Mood::Info,
-                Some(&action),
-            );
-        }
-        match p.kind {
-            PendingKind::Run { job } => {
-                let result = job(self.platform.as_ref());
-                self.finish(p.meta, result, "confirmed")
+            ServerMessage::reply(&p.meta.request_id, true, t("confirm_cancelled", &[]), Mood::Info, Some(&action))
+        } else {
+            match p.kind {
+                PendingKind::Run { job } => {
+                    let result = job(self.platform.as_ref());
+                    self.finish(p.meta, result, "confirmed")
+                }
+                PendingKind::Clarify { action, params } => {
+                    self.run(&p.meta.request_id, &action, params, p.meta.source, p.meta.text)
+                }
             }
-            PendingKind::Clarify { action, params } => {
-                self.run(&p.meta.request_id, &action, params, p.meta.source, p.meta.text)
+        };
+        if let Some(w) = waiter {
+            let _ = w.send(result.clone());
+        }
+        result
+    }
+
+    // ---------- Claude ----------
+
+    /// Neue Claude-Anfrage beginnt: noch nichts Fremdes gelesen.
+    pub fn begin_claude_turn(&self) {
+        self.tainted.store(false, Ordering::SeqCst);
+    }
+
+    /// Hat Claude in dieser Anfrage schon fremde Inhalte gelesen?
+    pub fn claude_tainted(&self) -> bool {
+        self.tainted.load(Ordering::SeqCst)
+    }
+
+    /// Tool-Aufruf von Claude. Braucht er eine Bestätigung, wird `on_question` mit der Rückfrage
+    /// aufgerufen (Overlay zeigt sie) und blockierend auf den Klick am PC gewartet – höchstens
+    /// `timeout`. Ohne Antwort gilt sie als abgelehnt.
+    pub fn claude_invoke(
+        &self,
+        id: &str,
+        action: &str,
+        params: Value,
+        on_question: &mut dyn FnMut(&ServerMessage),
+        timeout: Duration,
+    ) -> ServerMessage {
+        if !self.enabled() {
+            return self.reply_fail(id, t("disabled", &[]), Mood::Error);
+        }
+        let msg = self.run(id, action, params, Source::Claude, None);
+        let ServerMessage::ConfirmRequest { confirm_id, .. } = &msg else { return msg };
+        let (tx, rx) = std::sync::mpsc::channel();
+        {
+            let mut slot = self.pending.lock().unwrap();
+            match slot.as_mut() {
+                Some(p) if &p.confirm_id == confirm_id => p.waiter = Some(tx),
+                _ => return self.reply_fail(id, t("confirm_expired", &[]), Mood::Info),
+            }
+        }
+        on_question(&msg);
+        match rx.recv_timeout(timeout) {
+            Ok(result) => result,
+            Err(_) => {
+                // Zeit abgelaufen oder Frage ersetzt/Not-Aus: offene Frage verwerfen.
+                let mut slot = self.pending.lock().unwrap();
+                if slot.as_ref().is_some_and(|p| &p.confirm_id == confirm_id) {
+                    let p = slot.take().unwrap();
+                    drop(slot);
+                    self.log_meta(&p.meta, "expired", "", None, None);
+                }
+                self.reply_fail(id, t("confirm_expired", &[]), Mood::Info)
             }
         }
     }
@@ -461,6 +519,21 @@ impl Engine {
 
         match plan {
             Err(e) => self.finish(meta, Err(e), "failed"),
+            // Claude bekommt Rückfragen als Antwort (mit den Möglichkeiten) und fragt selbst nach.
+            Ok(Plan::Clarify { question, choices, .. }) if meta.source == Source::Claude => {
+                let options: Vec<String> = choices.iter().map(|c| c.label.clone()).collect();
+                let data = if options.is_empty() {
+                    question.clone()
+                } else {
+                    format!("{question} Möglich: {}", options.join("; "))
+                };
+                self.log_meta(&meta, "unclear", &question, None, None);
+                let mut reply = ServerMessage::reply(id, false, question, Mood::Confused, Some(action));
+                if let ServerMessage::Reply { data: d, .. } = &mut reply {
+                    *d = Some(data);
+                }
+                reply
+            }
             Ok(Plan::Clarify { question, params: new_params, action: next, choices }) => {
                 let confirm_id = self.next_id();
                 meta.tier = 1;
@@ -472,10 +545,11 @@ impl Engine {
                     pc_only: false,
                     created: Instant::now(),
                     kind: PendingKind::Clarify { action: next, params: new_params },
+                    waiter: None,
                 });
-                self.confirm_request(id, confirm_id, question, 1, false).with_choices(choices)
+                self.confirm_request(id, confirm_id, question, 1, false, None).with_choices(choices)
             }
-            Ok(Plan::Ready { tier, what, job }) => {
+            Ok(Plan::Ready { tier, what, job, detail, choices }) => {
                 let tier = tier.max(spec.tier);
                 meta.tier = tier as u8;
                 if tier != Tier::Instant && meta.source == Source::Rule {
@@ -506,8 +580,9 @@ impl Engine {
                     pc_only,
                     created: Instant::now(),
                     kind: PendingKind::Run { job },
+                    waiter: None,
                 });
-                self.confirm_request(id, confirm_id, question, tier as u8, pc_only)
+                self.confirm_request(id, confirm_id, question, tier as u8, pc_only, detail).with_choices(choices)
             }
         }
     }
@@ -515,6 +590,7 @@ impl Engine {
     fn prepare(&self, handler: &dyn Action, params: &Value, source: &Source) -> Result<Plan, ActionError> {
         let games = self.games();
         let places = self.places();
+        let data_dir = self.data_dir();
         self.with_play(|_| ()); // Spielzeit laden, bevor die Konfiguration gesperrt wird
         let play = self.play.lock().unwrap();
         let config = self.config.read().unwrap();
@@ -527,6 +603,8 @@ impl Engine {
             log: &self.log,
             now: crate::time::unix_now(),
             play: play.as_ref(),
+            tainted: *source == Source::Claude && self.claude_tainted(),
+            data_dir: &data_dir,
         };
         handler.prepare(params, &ctx)
     }
@@ -593,9 +671,18 @@ impl Engine {
                         }
                     }
                 }
+                if m.source == Source::Claude && TAINTING.contains(&m.action.as_str()) {
+                    self.tainted.store(true, Ordering::SeqCst);
+                }
                 self.log_meta(&m, ok_outcome, &done.text, done.undo.clone(), done.undo_of.clone());
-                ServerMessage::reply(&m.request_id, true, short(&done.text), done.mood, Some(&m.action))
-                    .with_choices(done.choices)
+                let mut reply =
+                    ServerMessage::reply(&m.request_id, true, short(&done.text), done.mood, Some(&m.action))
+                        .with_choices(done.choices);
+                if let ServerMessage::Reply { data, image, .. } = &mut reply {
+                    *data = done.data.or_else(|| (done.text.chars().count() > 300).then(|| done.text.clone()));
+                    *image = done.image;
+                }
+                reply
             }
             Err(e) => {
                 let (text, mood) = match &e {
@@ -617,7 +704,15 @@ impl Engine {
         format!("c{}", self.counter.fetch_add(1, Ordering::Relaxed) + 1)
     }
 
-    fn confirm_request(&self, id: &str, confirm_id: String, text: String, tier: u8, pc_only: bool) -> ServerMessage {
+    fn confirm_request(
+        &self,
+        id: &str,
+        confirm_id: String,
+        text: String,
+        tier: u8,
+        pc_only: bool,
+        detail: Option<String>,
+    ) -> ServerMessage {
         let secs = self.config.read().unwrap().confirm_timeout_secs;
         ServerMessage::ConfirmRequest {
             id: id.into(),
@@ -626,6 +721,7 @@ impl Engine {
             tier,
             expires_in_ms: secs * 1000,
             pc_only,
+            detail: detail.map(|d| d.chars().take(20_000).collect()),
             choices: Vec::<Choice>::new(),
         }
     }
@@ -643,6 +739,12 @@ impl Engine {
             message: msg.into(),
             ..Default::default()
         });
+    }
+
+    /// Claude-Anfrage protokollieren (erkannter Text + Anfang der Antwort; Tool-Aufrufe stehen einzeln).
+    pub fn log_claude(&self, text: &str, answer: &str) {
+        let short: String = answer.chars().take(200).collect();
+        self.log_plain(&Source::Claude, Some(text), "claude", &short);
     }
 
     /// Wartung: abgelaufene Papierkorb-Einträge entfernen, fälliges Backup anlegen.

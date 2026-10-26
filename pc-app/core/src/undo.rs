@@ -40,6 +40,10 @@ pub enum UndoOp {
         file: PathBuf,
         id: String,
     },
+    /// Mehrere Schritte auf einmal (z. B. alle Sicherungen eines Skripts), rückwärts angewendet.
+    Batch {
+        ops: Vec<UndoOp>,
+    },
     /// Lautstärke eines Programms zurücksetzen.
     AppVolume {
         process: String,
@@ -76,6 +80,7 @@ impl UndoOp {
             UndoOp::AppVolume { process, level, .. } => {
                 format!("{} zurück auf {level}", process.trim_end_matches(".exe"))
             }
+            UndoOp::Batch { ops } => format!("{} Änderungen zurücknehmen", ops.len()),
         }
     }
 
@@ -125,6 +130,19 @@ impl UndoOp {
                     m.save(dir)?;
                 }
                 Ok("Wieder vergessen.".into())
+            }
+            UndoOp::Batch { ops } => {
+                let mut errors = Vec::new();
+                for op in ops.iter().rev() {
+                    if let Err(e) = op.apply(pf, trash) {
+                        errors.push(e);
+                    }
+                }
+                if errors.is_empty() {
+                    Ok(format!("{} Änderungen zurückgenommen.", ops.len()))
+                } else {
+                    Err(errors.join("; "))
+                }
             }
             UndoOp::AppVolume { process, level, muted } => {
                 pf.set_app_volume(process, Some(*level), Some(*muted)).map_err(|e| e.to_string())?;

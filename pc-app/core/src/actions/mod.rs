@@ -19,6 +19,7 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 mod close;
+mod edit;
 mod files;
 mod focus;
 mod info;
@@ -26,7 +27,9 @@ mod launch;
 mod media;
 mod memory;
 mod notes;
+mod read;
 mod screen;
+pub mod shell;
 mod spotify;
 mod system;
 mod volume;
@@ -45,6 +48,11 @@ pub struct Ctx<'a> {
     pub now: i64,
     /// Spielzeit und laufendes Spiel
     pub play: Option<&'a crate::playtime::Tracker>,
+    /// In dieser Claude-Anfrage wurden schon Bildschirm, Dateien, Zwischenablage o. Ä. gelesen
+    /// → Skripte dürfen nur noch lesen (Schutz vor eingeschleusten Befehlen).
+    pub tainted: bool,
+    /// Panco-Datenordner (Skripte, Gedächtnis …)
+    pub data_dir: &'a std::path::Path,
 }
 
 /// Ergebnis einer ausgeführten Aktion.
@@ -57,11 +65,23 @@ pub struct Done {
     /// Diese Aktion hat den Protokolleintrag mit dieser ID rückgängig gemacht.
     pub undo_of: Option<String>,
     pub choices: Vec<Choice>,
+    /// Vollständiges Ergebnis für Claude (Dateiinhalt, gelesener Bildschirmtext …); nie vorgelesen.
+    pub data: Option<String>,
+    /// Bild für Claude (PNG), z. B. ein Bildschirmfoto im Claude-Modus.
+    pub image: Option<Vec<u8>>,
 }
 
 impl Done {
     pub fn new(text: impl Into<String>, mood: Mood) -> Self {
-        Done { text: text.into(), mood, undo: None, undo_of: None, choices: Vec::new() }
+        Done { text: text.into(), mood, undo: None, undo_of: None, choices: Vec::new(), data: None, image: None }
+    }
+    pub fn data(mut self, data: impl Into<String>) -> Self {
+        self.data = Some(data.into());
+        self
+    }
+    pub fn image(mut self, png: Vec<u8>) -> Self {
+        self.image = Some(png);
+        self
     }
     pub fn ok(text: impl Into<String>) -> Self {
         Self::new(text, Mood::Success)
@@ -81,7 +101,8 @@ pub type Job = Box<dyn FnOnce(&dyn Platform) -> Result<Done, ActionError> + Send
 
 pub enum Plan {
     /// Parameter geprüft, Ziel aufgelöst. `tier` kann über der Katalog-Mindeststufe liegen.
-    Ready { tier: Tier, what: String, job: Job },
+    /// `detail` = Vorschau für die Rückfrage (Diff, Skript).
+    Ready { tier: Tier, what: String, job: Job, detail: Option<String>, choices: Vec<Choice> },
     /// Rückfrage ("Meinst du Deadlock?" / "Gefunden: X. Öffnen?"): bei Ja wird `action` (oder dieselbe
     /// Aktion) mit `params` neu vorbereitet. `choices` = Alternativen zum Anklicken.
     Clarify { question: String, params: Value, action: Option<&'static str>, choices: Vec<Choice> },
@@ -96,19 +117,33 @@ impl Plan {
         what: impl Into<String>,
         job: impl FnOnce(&dyn Platform) -> Result<Done, ActionError> + Send + 'static,
     ) -> Self {
-        Plan::Ready { tier, what: what.into(), job: Box::new(job) }
+        Plan::Ready { tier, what: what.into(), job: Box::new(job), detail: None, choices: Vec::new() }
     }
     pub fn instant(
         what: impl Into<String>,
         job: impl FnOnce(&dyn Platform) -> Result<Done, ActionError> + Send + 'static,
     ) -> Self {
-        Plan::Ready { tier: Tier::Instant, what: what.into(), job: Box::new(job) }
+        Plan::Ready { tier: Tier::Instant, what: what.into(), job: Box::new(job), detail: None, choices: Vec::new() }
     }
     pub fn confirm(
         what: impl Into<String>,
         job: impl FnOnce(&dyn Platform) -> Result<Done, ActionError> + Send + 'static,
     ) -> Self {
-        Plan::Ready { tier: Tier::Confirm, what: what.into(), job: Box::new(job) }
+        Plan::Ready { tier: Tier::Confirm, what: what.into(), job: Box::new(job), detail: None, choices: Vec::new() }
+    }
+    /// Vorschau (Diff, Skript) für die Rückfrage anhängen.
+    pub fn with_detail(mut self, text: impl Into<String>) -> Self {
+        if let Plan::Ready { detail, .. } = &mut self {
+            *detail = Some(text.into());
+        }
+        self
+    }
+    /// Zusätzliche Knöpfe unter der Rückfrage (z. B. "Erst in der Sandbox testen").
+    pub fn with_choices(mut self, c: Vec<Choice>) -> Self {
+        if let Plan::Ready { choices, .. } = &mut self {
+            *choices = c;
+        }
+        self
     }
 }
 
@@ -210,5 +245,15 @@ pub fn registry() -> Vec<Box<dyn Action>> {
         Box::new(spotify::Play),
         Box::new(spotify::Now),
         Box::new(info::Help),
+        Box::new(read::ScreenRead),
+        Box::new(read::ScreenLook),
+        Box::new(read::WindowActive),
+        Box::new(read::ClipboardRead),
+        Box::new(read::FileRead),
+        Box::new(edit::FileEdit),
+        Box::new(shell::ShellRun),
+        Box::new(shell::ShellTest),
+        Box::new(shell::ShellSave),
+        Box::new(shell::ShellSaved),
     ]
 }

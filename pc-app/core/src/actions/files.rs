@@ -173,10 +173,12 @@ impl Action for FileSearch {
 /// Auswahl an eine fertige Ausführung hängen.
 fn with_choices(plan: Plan, choices: Vec<Choice>) -> Plan {
     match plan {
-        Plan::Ready { tier, what, job } => Plan::Ready {
+        Plan::Ready { tier, what, job, detail, choices: extra } => Plan::Ready {
             tier,
             what,
             job: Box::new(move |pf| job(pf).map(|d| if d.choices.is_empty() { d.choices(choices) } else { d })),
+            detail,
+            choices: extra,
         },
         other => other,
     }

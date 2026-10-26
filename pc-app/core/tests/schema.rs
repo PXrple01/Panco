@@ -38,7 +38,14 @@ fn messages_match_shared_schema() {
             tier: 2,
             expires_in_ms: 30000,
             pc_only: true,
+            detail: Some("- alt\n+ neu".into()),
             choices: vec![],
+        },
+        ServerMessage::Stream {
+            id: "3".into(),
+            text: "Das ist".into(),
+            done: false,
+            activity: Some("liest den Bildschirm".into()),
         },
         ServerMessage::reply("2", true, "Gefunden.", Mood::Info, Some("file.search")).with_choices(vec![
             panco_core::protocol::Choice {

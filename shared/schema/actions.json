@@ -1,5 +1,5 @@
 {
-  "$comment": "Panco-Aktionskatalog: einzige Quelle für Whitelist, Stufen, Parameter-Schemas und (ab Etappe 6) Claude-Tools. Rust prüft im Test, dass jede hier gelistete Aktion implementiert ist und umgekehrt. tier = Mindeststufe; dynamic_tier = Stufe kann je nach Parametern steigen (z. B. Pfad außerhalb freigegebener Ordner). remote = darf vom iPhone ausgelöst werden.",
+  "$comment": "Panco-Aktionskatalog: einzige Quelle für Whitelist, Stufen, Parameter-Schemas und (ab Etappe 6) Claude-Tools. Rust prüft im Test, dass jede hier gelistete Aktion implementiert ist und umgekehrt. tier = Mindeststufe; dynamic_tier = Stufe kann je nach Parametern steigen (z. B. Pfad außerhalb freigegebener Ordner). remote = darf vom iPhone ausgelöst werden. claude = als Werkzeug für Claude angeboten (Standard true).",
   "version": 1,
   "actions": [
     {
@@ -720,7 +720,8 @@
           "name",
           "steps"
         ]
-      }
+      },
+      "claude": false
     },
     {
       "id": "macro.run",
@@ -762,7 +763,8 @@
         "required": [
           "name"
         ]
-      }
+      },
+      "claude": false
     },
     {
       "id": "spotify.play",
@@ -803,6 +805,226 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {}
+      }
+    },
+    {
+      "id": "screen.read",
+      "tier": 1,
+      "remote": false,
+      "title": "Bildschirm lesen",
+      "description": "Liest den Text im Vordergrundfenster (oder ganzen Bildschirm) lokal per Windows-Texterkennung. Nur auf ausdrückliche Anfrage; während des Lesens sichtbar.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "enum": [
+              "window",
+              "screen"
+            ],
+            "description": "window = nur das Fenster vorne (Standard), screen = ganzer Bildschirm"
+          }
+        }
+      }
+    },
+    {
+      "id": "screen.look",
+      "tier": 1,
+      "remote": false,
+      "title": "Bildschirm an Claude zeigen",
+      "description": "Schickt ein Bildschirmfoto nur für diese eine Frage an Claude – nur wenn der Text (screen_read) nicht reicht, z. B. bei Symbolen oder Bildern.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "enum": [
+              "window",
+              "screen"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "window.active",
+      "tier": 1,
+      "remote": false,
+      "title": "Aktives Fenster",
+      "description": "Titel und Programm des Fensters im Vordergrund.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
+    },
+    {
+      "id": "clipboard.read",
+      "tier": 1,
+      "remote": false,
+      "title": "Zwischenablage lesen",
+      "description": "Text in der Zwischenablage (nur auf ausdrückliche Anfrage).",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
+    },
+    {
+      "id": "file.read",
+      "tier": 1,
+      "remote": false,
+      "title": "Datei lesen",
+      "description": "Liest eine Textdatei (Code, Notizen, Logs). In freigegebenen Ordnern sofort, anderswo nach Bestätigung. Geschützte Notizen nie.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "description": "Vollständiger Pfad"
+          },
+          "max_chars": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 200000
+          }
+        }
+      }
+    },
+    {
+      "id": "file.edit",
+      "tier": 2,
+      "remote": false,
+      "redact": true,
+      "title": "Datei bearbeiten",
+      "description": "Ändert eine Textdatei: entweder find → replace (genau eine Stelle, oder alle mit all=true) oder komplett neuer Inhalt (content). Der Nutzer sieht vorher die Änderung (Diff) und bestätigt am PC; vorher liegt eine Kopie im Papierkorb.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          },
+          "find": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100000
+          },
+          "replace": {
+            "type": "string",
+            "maxLength": 100000
+          },
+          "all": {
+            "type": "boolean"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 400000
+          }
+        }
+      }
+    },
+    {
+      "id": "shell.run",
+      "tier": 1,
+      "remote": false,
+      "title": "Geprüftes Skript",
+      "description": "Führt ein PowerShell-Skript aus, das Panco vorher prüft: nur lesen → sofort; ändern in freigegebenen Ordnern → sofort mit Sicherungskopie; riskant → Rückfrage am PC (mit Wiederherstellungspunkt); verschleiert/nachgeladen → nie. Nur für Aufgaben, für die es kein Werkzeug gibt.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "script",
+          "purpose"
+        ],
+        "properties": {
+          "script": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Kurz auf Deutsch, was das Skript tut (wird dem Nutzer gezeigt)"
+          }
+        }
+      }
+    },
+    {
+      "id": "shell.test",
+      "tier": 1,
+      "remote": false,
+      "claude": false,
+      "title": "Skript im Sandkasten testen",
+      "description": "Testlauf eines riskanten Skripts in der Windows-Sandbox: zeigt, was sich ändern würde.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-z-]{1,40}$"
+          }
+        }
+      }
+    },
+    {
+      "id": "shell.save",
+      "tier": 1,
+      "remote": false,
+      "claude": false,
+      "title": "Skript als Befehl speichern",
+      "description": "Speichert das zuletzt erfolgreiche Skript als eigenen Befehl (danach ohne Claude).",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 40
+          }
+        }
+      }
+    },
+    {
+      "id": "shell.saved",
+      "tier": 1,
+      "remote": false,
+      "claude": false,
+      "title": "Gespeichertes Skript",
+      "description": "Führt ein gespeichertes Skript aus (wird jedes Mal neu geprüft).",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9-]{1,40}$"
+          }
+        }
       }
     }
   ]

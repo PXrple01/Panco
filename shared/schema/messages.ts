@@ -37,7 +37,18 @@ export interface ConfirmRequest {
   tier: 1 | 2 | 3; // 1 = Rückfrage "Meinst du …?"
   expires_in_ms: number;
   pc_only: boolean;
+  /** Vorschau zum Prüfen (Diff, Skript) – nichtproportional */
+  detail?: string;
   choices?: Choice[];
+}
+
+/** Claude-Antwort, die gerade entsteht ("text" wächst); "activity" = was Panco gerade tut. */
+export interface Stream {
+  type: "stream";
+  id: string;
+  text: string;
+  done: boolean;
+  activity?: string;
 }
 
 export interface State {
@@ -48,4 +59,4 @@ export interface State {
   level?: number;
 }
 
-export type ServerMessage = Reply | ConfirmRequest | State;
+export type ServerMessage = Reply | ConfirmRequest | Stream | State;

@@ -38,6 +38,13 @@ pub struct ActionSpec {
     /// Inhalte (Text-Parameter, erkannter Satz, Antwort) nicht ins Protokoll schreiben.
     #[serde(default)]
     pub redact: bool,
+    /// Als Werkzeug für Claude angeboten
+    #[serde(default = "yes")]
+    pub claude: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 #[derive(Debug, Deserialize)]

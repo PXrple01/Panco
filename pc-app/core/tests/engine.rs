@@ -234,7 +234,8 @@ fn time_date_and_help() {
     assert!(r.text().starts_with("Es ist ") && r.text().ends_with(" Uhr."), "{}", r.text());
     assert!(say(&e, "Welcher Tag ist heute?").text().starts_with("Heute ist "));
     assert!(say(&e, "Was kannst du?").text().starts_with("Ich kann "));
-    assert!(say(&e, "Lies mir vor, was im Editor steht").text().contains("Claude"));
+    // Bildschirm lesen: lokal per Texterkennung (Mock ohne Bildschirm → ehrliche Antwort)
+    assert!(say(&e, "Lies mir vor, was im Editor steht").text().contains("Bildschirm"));
 }
 
 #[test]

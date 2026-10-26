@@ -258,7 +258,7 @@ impl Action for MacroRun {
             }
             let handler = registry.iter().find(|a| a.id() == step.action).ok_or(ActionError::Unsupported)?;
             match handler.prepare(&step.params, ctx)? {
-                Plan::Ready { tier: st, what, job } => {
+                Plan::Ready { tier: st, what, job, .. } => {
                     tier = tier.max(st).max(spec.tier);
                     whats.push(what);
                     jobs.push(job);

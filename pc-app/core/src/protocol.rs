@@ -64,6 +64,12 @@ pub enum ServerMessage {
         action: Option<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         choices: Vec<Choice>,
+        /// Vollständiges Ergebnis für Claude (z. B. Dateiinhalt) – wird nie an Oberflächen geschickt.
+        #[serde(skip)]
+        data: Option<String>,
+        /// Bild für Claude (PNG) – wird nie an Oberflächen geschickt.
+        #[serde(skip)]
+        image: Option<Vec<u8>>,
     },
     ConfirmRequest {
         id: String,
@@ -72,8 +78,19 @@ pub enum ServerMessage {
         tier: u8,
         expires_in_ms: u64,
         pc_only: bool,
+        /// Vorschau zum Prüfen (Diff, Skript)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         choices: Vec<Choice>,
+    },
+    /// Claude-Antwort, die gerade entsteht.
+    Stream {
+        id: String,
+        text: String,
+        done: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        activity: Option<String>,
     },
     State {
         avatar: AvatarState,
@@ -93,6 +110,8 @@ impl ServerMessage {
             mood,
             action: action.map(str::to_string),
             choices: Vec::new(),
+            data: None,
+            image: None,
         }
     }
 
@@ -100,7 +119,7 @@ impl ServerMessage {
     pub fn with_choices(mut self, new: Vec<Choice>) -> Self {
         match &mut self {
             ServerMessage::Reply { choices, .. } | ServerMessage::ConfirmRequest { choices, .. } => *choices = new,
-            ServerMessage::State { .. } => {}
+            ServerMessage::Stream { .. } | ServerMessage::State { .. } => {}
         }
         self
     }
@@ -108,14 +127,16 @@ impl ServerMessage {
     pub fn choices(&self) -> &[Choice] {
         match self {
             ServerMessage::Reply { choices, .. } | ServerMessage::ConfirmRequest { choices, .. } => choices,
-            ServerMessage::State { .. } => &[],
+            ServerMessage::Stream { .. } | ServerMessage::State { .. } => &[],
         }
     }
 
     /// Text, den Panco sagen/anzeigen soll (für TTS und Tests).
     pub fn text(&self) -> &str {
         match self {
-            ServerMessage::Reply { text, .. } | ServerMessage::ConfirmRequest { text, .. } => text,
+            ServerMessage::Reply { text, .. }
+            | ServerMessage::ConfirmRequest { text, .. }
+            | ServerMessage::Stream { text, .. } => text,
             ServerMessage::State { .. } => "",
         }
     }

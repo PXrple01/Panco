@@ -16,6 +16,8 @@ pub struct Config {
     pub system: SystemSettings,
     /// Spotify Web-API (optional): eigene Client-ID aus dem Spotify-Entwicklerportal. Leer = aus.
     pub spotify_client_id: String,
+    /// Claude-Assistent (aus, bis ein Anthropic-Key im Tresor liegt und er eingeschaltet ist)
+    pub claude: ClaudeSettings,
     /// Programme, Webseiten und URIs, die Panco per Name öffnen darf.
     pub apps: Vec<AppAlias>,
     /// Kurznamen für Spiele, z. B. "cs" → "Counter-Strike 2".
@@ -31,6 +33,26 @@ pub struct Config {
     /// Aktionen der Stufe 2, die ohne Rückfrage laufen – nur für Befehle direkt am PC
     /// (getippt/gesprochen), nie für iPhone, Claude oder Regeln. Stufe 3 fragt immer.
     pub skip_confirm: Vec<String>,
+}
+
+/// Claude-Gespräch (Etappe 7). Der API-Key liegt nur im Windows-Tresor, nie hier.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct ClaudeSettings {
+    /// Was Panco nicht selbst versteht, geht an Claude (nur der Text, nie Audio)
+    pub enabled: bool,
+    /// Modell-ID, z. B. "claude-opus-5-5"
+    pub model: String,
+    /// Denktiefe: "low" (schnell, Standard zum Sprechen), "medium", "high"
+    pub effort: String,
+    /// Bildschirmfoto an Claude erlauben, wenn der lokale Text (OCR) nicht reicht
+    pub allow_screen_images: bool,
+}
+
+impl Default for ClaudeSettings {
+    fn default() -> Self {
+        Self { enabled: false, model: "claude-opus-5-5".into(), effort: "low".into(), allow_screen_images: true }
+    }
 }
 
 /// Start mit Windows und Absturz-Wächter.
@@ -286,6 +308,7 @@ impl Default for Config {
             system: SystemSettings::default(),
             skip_confirm: Vec::new(),
             spotify_client_id: String::new(),
+            claude: ClaudeSettings::default(),
             game_processes: [
                 ("VALORANT-Win64-Shipping.exe", "Valorant"),
                 ("League of Legends.exe", "League of Legends"),

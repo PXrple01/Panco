@@ -15,6 +15,16 @@ pub struct MockPlatform {
     pub http_replies: Mutex<std::collections::VecDeque<(u16, String)>>,
     pub http_requests: Mutex<Vec<HttpRequest>>,
     pub secrets: Mutex<std::collections::HashMap<String, String>>,
+    /// Bildschirm: erkannter Text (OCR) und ob überhaupt fotografiert werden kann
+    pub screen_text: Mutex<Option<String>>,
+    pub clipboard: Mutex<Option<String>>,
+    pub active: Mutex<Option<WindowInfo>>,
+    /// Vorbereitete PowerShell-Ergebnisse; ausgeführte Skripte (Inhalt) werden gemerkt
+    pub ps_results: Mutex<std::collections::VecDeque<ScriptOutput>>,
+    pub ps_scripts: Mutex<Vec<String>>,
+    pub restore_points: Mutex<Vec<String>>,
+    pub restore_fails: Mutex<bool>,
+    pub sandbox: Mutex<Option<String>>,
 }
 
 impl MockPlatform {
@@ -135,6 +145,55 @@ impl Platform for MockPlatform {
             None => s.remove(key),
         };
         Ok(())
+    }
+    /// Vorbereitete Antwort zeilenweise ausliefern (wie ein SSE-Stream).
+    fn http_stream(&self, req: &HttpRequest, on_line: &mut dyn FnMut(&str) -> bool) -> PResult<u16> {
+        let (status, body) = self.http(req)?;
+        for line in body.lines() {
+            if !on_line(line) {
+                break;
+            }
+        }
+        Ok(status)
+    }
+    fn capture(&self, target: CaptureTarget) -> PResult<Image> {
+        self.record(format!("capture {target:?}"));
+        if self.screen_text.lock().unwrap().is_none() {
+            return Err(PlatformError::Unsupported);
+        }
+        Ok(Image { width: 4, height: 2, rgba: vec![200; 4 * 2 * 4] })
+    }
+    fn ocr(&self, _image: &Image) -> PResult<String> {
+        self.screen_text.lock().unwrap().clone().ok_or(PlatformError::Unsupported)
+    }
+    fn clipboard_text(&self) -> PResult<Option<String>> {
+        Ok(self.clipboard.lock().unwrap().clone())
+    }
+    fn active_window(&self) -> PResult<Option<WindowInfo>> {
+        Ok(self.active.lock().unwrap().clone())
+    }
+    fn powershell(
+        &self,
+        script: &std::path::Path,
+        _cwd: &std::path::Path,
+        _t: std::time::Duration,
+    ) -> PResult<ScriptOutput> {
+        self.ps_scripts.lock().unwrap().push(std::fs::read_to_string(script).unwrap_or_default());
+        Ok(self.ps_results.lock().unwrap().pop_front().unwrap_or_default())
+    }
+    fn restore_point(&self, description: &str) -> PResult<()> {
+        if *self.restore_fails.lock().unwrap() {
+            return Err(PlatformError::Failed("Adminrechte nötig".into()));
+        }
+        self.restore_points.lock().unwrap().push(description.into());
+        Ok(())
+    }
+    fn sandbox_available(&self) -> bool {
+        self.sandbox.lock().unwrap().is_some()
+    }
+    fn sandbox_run(&self, script: &str, _t: std::time::Duration) -> PResult<String> {
+        self.record(format!("sandbox {} Zeichen", script.len()));
+        self.sandbox.lock().unwrap().clone().ok_or(PlatformError::Unsupported)
     }
     fn random_bytes(&self, n: usize) -> PResult<Vec<u8>> {
         Ok((0..n).map(|i| (i * 37 % 256) as u8).collect())

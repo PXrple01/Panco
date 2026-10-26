@@ -145,10 +145,14 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
             r"^(?:was kannst du(?: alles)?(?: machen| tun)?|hilfe|was kann ich (?:dich )?fragen|wie funktionierst du|was kann panco)$",
             |_| intent("panco.help", json!({})),
         ),
-        // Bildschirm/Fenster vorlesen kommt mit dem Claude-Assistenten – bis dahin ehrlich sagen.
+        // "Lies mir vor, was im Editor steht" – lokal per Texterkennung (nur auf Anfrage).
         rule(
-            r"^(?:(?:lies|lese|les|läs|lees)(?: mir)?(?: vor)? was (?:im|in dem|auf dem|in meinem|am|da im) (?:editor|fenster|bildschirm|screen|monitor|browser|chat)|was steht (?:da|hier|im|in dem|auf dem) (?:editor|fenster|bildschirm|screen|monitor|browser|chat)?)\b.*$",
-            |_| intent("panco.help", json!({"topic": "screen"})),
+            r"^(?:(?:lies|lese|les|läs|lees)(?: mir)?(?: vor)? was (?:im|in dem|auf dem|in meinem|am|da im) (editor|fenster|bildschirm|screen|monitor|browser|chat)|was steht (?:da|hier|im|in dem|auf dem) ?(editor|fenster|bildschirm|screen|monitor|browser|chat)?)\b.*$",
+            |c| {
+                let w = c.get(1).or(c.get(2)).map_or("", |m| m.as_str());
+                let target = if matches!(w, "bildschirm" | "screen" | "monitor") { "screen" } else { "window" };
+                intent("screen.read", json!({"target": target}))
+            },
         ),
         // --- Gedächtnis zeigen, wiederholen ---
         rule(
@@ -168,6 +172,23 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         rule(
             r"^(?:nochmal|noch mal|noch einmal|nochmal bitte|wiederhol(?:e)?(?: das)?|mach das (?:nochmal|noch mal|noch einmal)|das gleiche (?:nochmal|noch mal))$",
             |_| intent("panco.repeat", json!({})),
+        ),
+        // --- Lesen auf Anfrage (lokal, ohne Claude) ---
+        rule(
+            r"^(?:lies|lese|lies mir) (?:mir )?(?:den |das )?(bildschirm|fenster|text auf dem bildschirm)(?: vor)?$|^was steht (?:auf dem |im )(bildschirm|fenster)$",
+            |c| {
+                let what =
+                    if c.get(1).or(c.get(2)).is_some_and(|m| m.as_str() == "bildschirm") { "screen" } else { "window" };
+                intent("screen.read", json!({"target": what}))
+            },
+        ),
+        rule(
+            r"^(?:was (?:steht|ist) in (?:der|meiner) zwischenablage|lies (?:mir )?(?:die )?zwischenablage(?: vor)?)$",
+            |_| intent("clipboard.read", json!({})),
+        ),
+        rule(
+            r"^(?:welches|was für ein) (?:fenster|programm) (?:ist|habe ich) (?:gerade )?(?:vorne|offen|aktiv)$",
+            |_| intent("window.active", json!({})),
         ),
         // --- Spotify (Web-API, optional) ---
         rule(
@@ -384,6 +405,11 @@ static ORIGINAL_RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         rule(
             r#"(?i)^(?:lösch|lösche|entfern|entferne)\s+(?:den\s+|meinen\s+)?(?:eigenen\s+)?(?:befehl|makro)\s+["„]?(.+?)["“]?$"#,
             |c| intent("macro.delete", json!({"name": cap(c, 1).trim()})),
+        ),
+        // Erfolgreiches Skript als eigenen Befehl speichern: "Speicher das als Befehl Aufräumen"
+        rule(
+            r#"(?i)^speicher(?:e)?\s+(?:das|dieses\s+skript|das\s+skript)\s+(?:bitte\s+)?als\s+(?:(?:neuen\s+)?befehl\s+)?["„]?([^"“]+?)["“]?\s*(?:ab)?$"#,
+            |c| intent("shell.save", json!({"name": cap(c, 1).trim()})),
         ),
         // "Erstelle eine neue Notiz und nenne sie Passwörter", "Neue Notiz Einkauf: Milch"
         rule(
@@ -740,8 +766,8 @@ mod tests {
         assert_eq!(p("Panco, wie spät ist es?"), Some(("info.time", json!({"what": "time"}))));
         assert_eq!(p("Welcher Tag ist heute?"), Some(("info.time", json!({"what": "date"}))));
         assert_eq!(p("Was kannst du alles?"), Some(("panco.help", json!({}))));
-        assert_eq!(p("Lese mir vor, was in dem Editor steht."), Some(("panco.help", json!({"topic": "screen"}))));
-        assert_eq!(p("Läs mir vor, was in dem Editor steht."), Some(("panco.help", json!({"topic": "screen"}))));
+        assert_eq!(p("Lese mir vor, was in dem Editor steht."), Some(("screen.read", json!({"target": "window"}))));
+        assert_eq!(p("Läs mir vor, was in dem Editor steht."), Some(("screen.read", json!({"target": "window"}))));
         assert_eq!(p("Panko, macht das Röckgängig."), Some(("panco.undo", json!({}))));
         assert_eq!(p("Rückgängig!"), Some(("panco.undo", json!({}))));
     }
@@ -810,6 +836,11 @@ mod tests {
         );
         assert_eq!(p("Lösche den Befehl Feierabend"), Some(("macro.delete", json!({"name": "Feierabend"}))));
         assert_eq!(p("nochmal"), Some(("panco.repeat", json!({}))));
+        assert_eq!(p("Speicher das als Befehl Aufräumen"), Some(("shell.save", json!({"name": "Aufräumen"}))));
+        assert_eq!(p("Lies mir den Bildschirm vor"), Some(("screen.read", json!({"target": "screen"}))));
+        assert_eq!(p("Was steht im Fenster?"), Some(("screen.read", json!({"target": "window"}))));
+        assert_eq!(p("Was steht in der Zwischenablage?"), Some(("clipboard.read", json!({}))));
+        assert_eq!(p("Welches Fenster ist gerade vorne?"), Some(("window.active", json!({}))));
         assert_eq!(
             p("Spiel Lo-Fi Beats auf Spotify"),
             Some(("spotify.play", json!({"query": "lo fi beats", "kind": "track"})))

@@ -75,6 +75,32 @@ pub struct HttpRequest {
     pub body: Option<String>,
 }
 
+/// Was fotografiert/gelesen werden soll.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaptureTarget {
+    /// Nur das Fenster im Vordergrund (Standard – zeigt am wenigsten).
+    ActiveWindow,
+    /// Der ganze Bildschirm, auf dem das Vordergrundfenster liegt.
+    Screen,
+}
+
+/// Bild im Speicher (RGBA, 8 Bit je Kanal).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Image {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
+/// Ergebnis eines PowerShell-Laufs.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ScriptOutput {
+    pub code: i32,
+    pub stdout: String,
+    pub stderr: String,
+    pub timed_out: bool,
+}
+
 pub trait Platform: Send + Sync {
     /// Öffnet einen Pfad, eine URI (steam://, discord://) oder https-URL mit festen Argumenten.
     /// Keine Shell: Windows ShellExecute bzw. xdg-open, Argumente werden nie interpretiert.
@@ -116,6 +142,95 @@ pub trait Platform: Send + Sync {
     fn secret_set(&self, key: &str, value: Option<&str>) -> PResult<()>;
     /// Kryptografisch sichere Zufallsbytes.
     fn random_bytes(&self, n: usize) -> PResult<Vec<u8>>;
+
+    /// HTTPS mit fortlaufender Antwort (Server-Sent Events): jede Zeile geht sofort an `on_line`
+    /// (`false` = abbrechen). Liefert den HTTP-Status; Fehlertexte kommen ebenfalls als Zeilen.
+    fn http_stream(&self, req: &HttpRequest, on_line: &mut dyn FnMut(&str) -> bool) -> PResult<u16> {
+        http_stream_send(req, on_line)
+    }
+
+    // ---- Etappe 7: nur auf ausdrückliche Anfrage ----
+
+    /// Bildschirmfoto (nur im Speicher).
+    fn capture(&self, _target: CaptureTarget) -> PResult<Image> {
+        Err(PlatformError::Unsupported)
+    }
+    /// Text im Bild lokal erkennen (Windows-OCR).
+    fn ocr(&self, _image: &Image) -> PResult<String> {
+        Err(PlatformError::Unsupported)
+    }
+    /// Text in der Zwischenablage.
+    fn clipboard_text(&self) -> PResult<Option<String>> {
+        Err(PlatformError::Unsupported)
+    }
+    /// Fenster im Vordergrund.
+    fn active_window(&self) -> PResult<Option<WindowInfo>> {
+        Err(PlatformError::Unsupported)
+    }
+    /// PowerShell-Skriptdatei ausführen (ohne Profil, ohne Fenster, mit Zeitlimit).
+    fn powershell(
+        &self,
+        _script: &std::path::Path,
+        _cwd: &std::path::Path,
+        _timeout: std::time::Duration,
+    ) -> PResult<ScriptOutput> {
+        Err(PlatformError::Unsupported)
+    }
+    /// Skript nur parsen (PowerShell-AST, nichts wird ausgeführt) → Befehlsnamen und Fehlerzahl.
+    fn powershell_parse(&self, _script: &str) -> PResult<ParsedScript> {
+        Err(PlatformError::Unsupported)
+    }
+    /// Windows-Wiederherstellungspunkt anlegen (braucht meist Adminrechte).
+    fn restore_point(&self, _description: &str) -> PResult<()> {
+        Err(PlatformError::Unsupported)
+    }
+    /// Ist die Windows-Sandbox eingeschaltet?
+    fn sandbox_available(&self) -> bool {
+        false
+    }
+    /// Skript in der Windows-Sandbox laufen lassen → Bericht (Ausgabe + geänderte Dateien).
+    fn sandbox_run(&self, _script: &str, _timeout: std::time::Duration) -> PResult<String> {
+        Err(PlatformError::Unsupported)
+    }
+}
+
+/// Was PowerShells eigener Parser in einem Skript sieht (Gegenprobe zur Panco-Analyse).
+#[derive(Debug, Clone, Default, PartialEq, serde::Deserialize)]
+pub struct ParsedScript {
+    pub errors: usize,
+    /// Namen aller Befehle (CommandAst), wie geschrieben
+    pub commands: Vec<String>,
+    /// Befehle mit berechnetem Namen (`& $x`) – nicht eindeutig
+    #[serde(default)]
+    pub dynamic: usize,
+}
+
+/// Wie `http_send`, aber zeilenweise (Streaming). Zeitlimit 5 Minuten, höchstens 32 MB.
+pub fn http_stream_send(req: &HttpRequest, on_line: &mut dyn FnMut(&str) -> bool) -> PResult<u16> {
+    use std::io::BufRead;
+    let fail = |e: ureq::Error| PlatformError::Failed(format!("Verbindung fehlgeschlagen: {e}"));
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .tls_config(ureq::tls::TlsConfig::builder().root_certs(ureq::tls::RootCerts::PlatformVerifier).build())
+        .http_status_as_error(false)
+        .timeout_global(Some(std::time::Duration::from_secs(300)))
+        .build()
+        .into();
+    let mut builder = ureq::http::Request::builder().method(req.method).uri(&req.url);
+    for (k, v) in &req.headers {
+        builder = builder.header(k, v);
+    }
+    let request =
+        builder.body(req.body.clone().unwrap_or_default()).map_err(|e| PlatformError::Failed(e.to_string()))?;
+    let mut resp = agent.run(request).map_err(fail)?;
+    let status = resp.status().as_u16();
+    let reader = std::io::BufReader::new(resp.body_mut().with_config().limit(32 << 20).reader());
+    for line in reader.lines() {
+        let line = line.map_err(|e| PlatformError::Failed(format!("Verbindung abgebrochen: {e}")))?;
+        if !on_line(&line) {
+            break;
+        }
+    }
+    Ok(status)
 }
 
 /// HTTPS mit den Zertifikaten des Systems, 15 s Zeitlimit, Antwort höchstens 1 MB.

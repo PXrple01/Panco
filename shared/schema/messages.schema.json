@@ -56,6 +56,7 @@
       "oneOf": [
         { "$ref": "#/$defs/Reply" },
         { "$ref": "#/$defs/ConfirmRequest" },
+        { "$ref": "#/$defs/Stream" },
         { "$ref": "#/$defs/State" }
       ]
     },
@@ -102,7 +103,21 @@
         "tier": { "enum": [1, 2, 3] },
         "expires_in_ms": { "type": "integer", "minimum": 0 },
         "pc_only": { "type": "boolean" },
+        "detail": { "type": "string", "maxLength": 20000, "description": "Vorschau zum Prüfen (Diff einer Datei, PowerShell-Skript) – nichtproportional anzeigen" },
         "choices": { "type": "array", "maxItems": 10, "items": { "$ref": "#/$defs/Choice" } }
+      }
+    },
+    "Stream": {
+      "description": "Claude-Antwort, die gerade entsteht: 'text' ist der bisherige Text (wächst), 'done' = fertig. 'activity' zeigt, was Panco gerade tut (z. B. Bildschirm lesen) – sichtbar, solange er es tut.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "text", "done"],
+      "properties": {
+        "type": { "const": "stream" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "text": { "type": "string", "maxLength": 4000 },
+        "done": { "type": "boolean" },
+        "activity": { "type": "string", "maxLength": 200 }
       }
     },
     "State": {
