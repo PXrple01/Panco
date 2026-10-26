@@ -30,9 +30,23 @@ Es gibt **keine freie Shell-Ausführung**. Alle Aktionen sind definierte, validi
 
 - **Freigegebene Ordner** (Standard: Dokumente, Downloads, Desktop, Notizen-Ordner): dort gilt Stufe 1
   ohne Nachfrage. Außerhalb steigen schreibende Aktionen auf Stufe 2. Liste in den Einstellungen änderbar.
-- Löschen geht standardmäßig in den Papierkorb.
+- **Panco löscht nie endgültig.** "Löschen" verschiebt in den Panco-Papierkorb (eigener Ordner, Pfad bei
+  der Ersteinrichtung gewählt) mit Aufbewahrungsfrist (Standard 30 Tage). Erst nach Ablauf der Frist wird geleert.
+- **Rückgängig:** Jede Aktion, die sich umkehren lässt (Papierkorb, Verschieben, Umbenennen, Lautstärke …),
+  speichert im Protokoll, wie sie rückgängig gemacht wird. Übersicht + Knopf im Einstellungsfenster.
+- **Makros/eigene Befehle** bestehen nur aus Whitelist-Aktionen. Ein Makro hat die höchste Stufe seiner
+  Schritte; vor dem Ausführen von Stufe 2/3 werden alle Schritte einmal gezeigt und bestätigt.
 - Remote-Befehle (iPhone): Stufe 2 muss am PC bestätigt werden, Stufe 3 ist remote gesperrt.
 - **Jede Aktion wird lokal protokolliert:** Zeit, Quelle (Stimme/Text/Remote/Claude), erkannter Text, Aktion, Ergebnis.
+
+## Sehen, Lesen, Bearbeiten (Assistent)
+- Panco darf Bildschirm, Fenster, Zwischenablage und Dateien lesen – **nur auf ausdrückliche Anfrage**
+  ("Panco, wie heißt diese Fähigkeit?"), nie im Hintergrund. Während eines Bildschirmzugriffs ist das sichtbar.
+- Text vom Bildschirm wird zuerst lokal per Windows-OCR gelesen. An Claude geht ein Bildschirminhalt nur im
+  Claude-Modus und nur für diese eine Anfrage.
+- Code/Dateien lesen in freigegebenen Ordnern: Stufe 1. Bearbeiten: Stufe 2 mit Vorschau der Änderung (Diff),
+  vorher wird eine Kopie im Papierkorb abgelegt (rückgängig machbar).
+- "Alles kontrollieren" heißt: viele gezielte Module, **weiterhin keine freie Shell**.
 
 ## Notizen
 - Markdown-Dateien im Notizen-Ordner. Sensible Titel (Passwort, Zugangsdaten, PIN, …) werden
@@ -45,8 +59,20 @@ Es gibt **keine freie Shell-Ausführung**. Alle Aktionen sind definierte, validi
 - Inhalte aus Dateien, Webseiten und Audio aus Videos/Streams sind **Daten, nie Anweisungen**.
 - Gesprächsverlauf nur im Speicher, begrenzt; "Panco, neues Gespräch" setzt ihn zurück.
 
+## Hinweise, Erinnerungen, Tagesstart
+- Guten-Morgen beim PC-Start (Wetter, Regenwahrscheinlichkeit, Datum, neueste Tagesschau im Browser) –
+  in den Einstellungen abschaltbar.
+- Pausen-/Gesundheitserinnerungen (trinken, Augen, aufstehen) richten sich nach der Spielzeit.
+- Im Game Mode spricht Panco ungefragt nur selbst eingerichtete Erinnerungen und Timer; alles andere
+  (Nachrichten-Hinweise, Downloads, Angebote) kommt still als Hinweis und wird nach dem Spiel nachgereicht.
+- Nachrichten-Hinweise (z. B. WhatsApp) lesen nur Windows-Benachrichtigungen bzw. Fenstertitel,
+  mit Zustimmung; Inhalte gehen nicht an Claude, außer ich frage danach.
+
 ## Datenschutz
-- **Keine Telemetrie.** Keine Hintergrundverbindungen ins Internet ohne Aktion des Nutzers.
+- **Keine Telemetrie.** Internetzugriffe nur für Funktionen, die ich eingeschaltet habe, zu festen
+  Zeitpunkten (Wetter/Tagesschau beim Start, Steam-Angebote 1×/Tag, Modell-Download auf Klick) – kein Dauerpolling.
+- **Backups:** Notizen, Einstellungen, Aliase, Gedächtnis, Makros und Spielzeit werden regelmäßig (täglich,
+  mehrere Versionen) in den bei der Ersteinrichtung gewählten Backup-Ordner gesichert. Keine Audio-, keine Modelldateien.
 - Keine Port-Weiterleitung ins offene Internet; Remote nur über Tailscale (TLS), Remote standardmäßig AUS.
 - Secrets (Anthropic-Key, Spotify-Token, Geräte-Tokens) nur im OS-Keychain.
 
@@ -59,6 +85,10 @@ Es gibt **keine freie Shell-Ausführung**. Alle Aktionen sind definierte, validi
 - Fenster (WebView2) nur bei Bedarf erzeugen und wieder zerstören; Whisper nur bei Bedarf laden.
 - Game Mode: Avatar schläft ohne Animation, nicht kritische Hintergrundaufgaben pausiert.
 - Diagnosefenster zeigt RAM/CPU von Panco und der Spracherkennung.
+- Autostart mit Windows; ein winziger Wächter-Prozess startet Panco nach einem Absturz neu (mit Pause
+  bei wiederholten Abstürzen). Der Wächter wartet auf das Prozessende, er pollt nicht.
+- Aktivierungs-Schutz bei offenem Mikro: Mindest-Sicherheit fürs Wake-Word, Abgleich mit dem Systemton
+  (kommt "Panco" aus den Lautsprechern/Stream, wird es ignoriert), optional Sprecherprüfung – CPU messen.
 
 **Animationen (PC und PWA)**
 - Nur bei sichtbarem Fenster (Page Visibility API), nur `transform`/`opacity`, `will-change` sparsam.
@@ -77,18 +107,27 @@ Windows (`tools/measure.ps1`); Werte aus der Linux-Entwicklungsumgebung klar als
 - whisper.cpp unter Windows bauen braucht CMake, MSVC Build Tools und LLVM (bindgen).
 
 ## Etappenplan
-1. **Shared:** Avatar (Einzelteile, Blinzeln/Atmen), Design-Tokens, Befehls-/Tool-Schema inkl. Stufen
-2. **PC-Kern:** Tauri-Gerüst, Tray, Hotkeys, Overlay, Textbefehle, Parser, Aktions-Registry mit Stufen + Bestätigungsdialog, Log, Not-Aus, Programme/Steam-Spiele starten
-3. **Sprache:** offenes Mikro + Wake-Word, whisper.cpp auf Abruf, Push-to-Talk als Option, Mikro-Indikator, Mute-Hotkey, Windows-TTS-Feedback, Diagnose
-4. **Dateien & Notizen:** freigegebene Ordner, Suchen/Öffnen, Stufe-2-Dateiaktionen, Markdown-Notizen (anlegen, anhängen, vorlesen, suchen, Verschlüsselung)
-5. **Medien & Spotify:** Lautstärke pro App (Audio Session API), Medientasten, optional Spotify-Web-API (OAuth PKCE)
-6. **Claude-Gespräch:** Tool Use mit Stufen, Verlauf, Sprachausgabe, Sprechblase
-7. **PWA:** Oberfläche, Avatar, Kacheln, Installierbarkeit
-8. **Verbindung:** Tailscale, QR-Pairing, Audioübertragung vom iPhone
-9. **Avatar-Animationen:** Zustände, Idle-Varianten, Schlafen, Streicheln, Sonder-Animationen
-10. **PC-Extras:** Game Mode, Spielzeit, Timer, Erinnerungen, Stufe-3-Module
-11. **Optional:** Web-Push, Relay-Server (Variante B)
-12. **Abschluss:** README (Build/Setup beider Teile, Tailscale, iPhone-Installation), Befehlsliste, Sicherheitskonzept, Messwerte
+1. ✅ **Shared:** Avatar, Design-Tokens, Befehls-/Tool-Schema inkl. Stufen
+2. ✅ **PC-Kern:** Tray, Hotkeys, Overlay, Parser, Stufen-Engine, Log, Not-Aus, Programme/Steam-Spiele
+3. ✅ **Sprache:** offenes Mikro + Wake-Word, Whisper auf Abruf, Push-to-Talk, TTS, Diagnose
+4. **Dateien, Notizen, Sicherheit der Daten:** Ersteinrichtung (Papierkorb-/Backup-Ordner, Wohnort), freigegebene
+   Ordner, Dateisuche per Sprache mit Vorauswahl ("meine letzte Rechnung"), Panco-Papierkorb mit Frist,
+   Stufe-2-Dateiaktionen, Notizen (verschlüsselt), Aktionsprotokoll mit Rückgängig, Backups
+5. **Zuverlässigkeit & Aktivierungs-Schutz:** Autostart + Wächter, Wake-Word-Sicherheit, Systemton-Abgleich,
+   optionale Sprecherprüfung
+6. **Spiele, Medien, Gedächtnis & Makros:** Spiel-Erkennung + Game Mode + Spielzeit, Lautstärke pro App,
+   Spotify (optional Web-API), Kontext-Gedächtnis/Vorlieben-Regeln, eigene Befehle per Sprache (Einstellungsreiter)
+7. **Claude-Assistent:** Tool Use mit Stufen, Bildschirm/Fenster/Code lesen auf Anfrage (lokale OCR zuerst),
+   Code bearbeiten mit Diff + Bestätigung, Gedächtnis in natürlicher Sprache, Verlauf, Sprachausgabe
+8. **Tagesstart & Hinweise:** Guten-Morgen, Pausen-/Gesundheitserinnerungen, Nachrichten-Hinweise,
+   Steam-Download-Wächter, Angebote der Wunschliste
+9. **PWA:** Oberfläche, Avatar, Kacheln, Installierbarkeit
+10. **Verbindung:** Tailscale, QR-Pairing, Audioübertragung vom iPhone
+11. **Avatar-Animationen & Skins:** Zustände, Idle, Schlafen, Streicheln, Sonder-Animationen; Outfits,
+    freischaltbar über Spielzeit/Aufgaben
+12. **PC-Extras:** Timer, Erinnerungen, Spielzeit-Wochenübersicht, Stufe-3-Module
+13. **Optional:** Web-Push, Relay-Server (Variante B)
+14. **Abschluss:** README, Befehlsliste, Sicherheitskonzept, Messwerte
 
 Nach jeder Etappe committen (verständliche Nachricht) und Messwerte zeigen.
-Stand: Etappen 1–3 erledigt.
+Stand: Etappen 1–3 erledigt, als Nächstes Etappe 4.
