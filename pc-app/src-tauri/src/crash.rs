@@ -8,14 +8,19 @@ use std::sync::OnceLock;
 
 static FILE: OnceLock<PathBuf> = OnceLock::new();
 
+/// Zeile ins Absturzprotokoll (auch für Meldungen des Wächters).
+pub fn note(text: &str) {
+    write(text);
+}
+
 fn write(text: &str) {
     let Some(path) = FILE.get() else { return };
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
-        let now = panco_core::time::unix_now();
-        let _ = writeln!(f, "[{now}] Panco {} – {text}", env!("CARGO_PKG_VERSION"));
+        let now = panco_core::log::ActionLog::now();
+        let _ = writeln!(f, "{now} Panco {} – {text}", env!("CARGO_PKG_VERSION"));
     }
 }
 

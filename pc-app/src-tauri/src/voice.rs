@@ -81,11 +81,15 @@ fn build_config(app: &AppHandle, muted: bool) -> VoiceConfig {
             SttChoice::Windows => SttEngine::Windows,
         },
         wakeword_path: wakeword_path(),
-        threshold: v.wake_threshold.clamp(0.2, 0.9),
+        // Untergrenze: noch empfindlicher löst ständig aus (Mindest-Sicherheit).
+        threshold: v.wake_threshold.clamp(panco_voice::wake::MIN_THRESHOLD, 0.9),
         model_path: model::path(&models_dir(), &v.model),
         keep_model_secs: v.keep_model_secs.clamp(5, 3600),
         prompt: whisper_prompt(&engine),
         phrases: command_phrases(&engine),
+        loopback_check: v.loopback_check,
+        speaker_check: v.speaker_check,
+        profile_path: voice_profile_path(),
     }
 }
 
@@ -209,6 +213,14 @@ fn on_event(app: &AppHandle, event: Event) {
             }
             set_state(app, Some(AvatarState::Listening), None, None);
         }
+        // Aktivierungs-Schutz hat "Panco" verworfen: nichts anzeigen, nur protokollieren.
+        Event::WakeRejected(reason) => {
+            let msg = match reason {
+                panco_voice::Rejected::Speakers => "„Panco“ kam aus den Lautsprechern – ignoriert",
+                panco_voice::Rejected::OtherVoice => "„Panco“ von einer fremden Stimme – ignoriert",
+            };
+            crate::engine(app).log_system("ignored", msg);
+        }
         Event::Level(level) => set_state(app, None, None, Some(level)),
         Event::NoSpeech => set_state(app, Some(AvatarState::Idle), None, None),
         Event::Transcript { purpose, transcript } => {
@@ -255,6 +267,28 @@ fn handle_transcript(app: &AppHandle, purpose: Purpose, text: &str) {
     }
     *v.asked.lock().unwrap() = None;
 
+    // Fehlaktivierung? Nach dem Wake-Word kam weder "Panco" im Text noch ein verständlicher Befehl
+    // (z. B. Unterhaltung im Raum). Dann still bleiben – nichts ausführen, nichts vorlesen und den
+    // mitgehörten Text auch nicht protokollieren.
+    if purpose == Purpose::Wake
+        && !starts_with_wake_word(&text)
+        && panco_core::parser::parse_text_lenient(&text).is_none()
+    {
+        crate::engine(app).log_system("ignored", "Vermutlich Fehlaktivierung (kein Befehl erkannt) – ignoriert");
+        set_state(app, Some(AvatarState::Idle), None, None);
+        overlay::emit(
+            app,
+            &ServerMessage::reply(
+                "v-ignoriert",
+                false,
+                "Hm? Ich dachte, jemand hat mich gerufen.",
+                panco_core::protocol::Mood::Confused,
+                None,
+            ),
+        );
+        return;
+    }
+
     let id = format!("v{}", v.counter.fetch_add(1, Ordering::Relaxed) + 1);
     let msg = crate::engine(app).command(&id, &text, Source::Voice);
     set_state(app, Some(AvatarState::Idle), None, None);
@@ -277,6 +311,12 @@ fn handle_transcript(app: &AppHandle, purpose: Purpose, text: &str) {
     if voice.speak_replies {
         v.speaker.say(msg.text(), follow_up);
     }
+}
+
+fn starts_with_wake_word(text: &str) -> bool {
+    text.split_whitespace()
+        .take(2)
+        .any(|w| panco_core::normalize::is_wake_word(w.trim_matches(|c: char| !c.is_alphanumeric())))
 }
 
 /// "Paanco, neue Notiz …" → "Neue Notiz …" (zur Anzeige; das Wake-Word hat Panco ja schon erkannt).
@@ -308,6 +348,11 @@ pub fn set_muted(app: &AppHandle, muted: bool) {
 pub fn toggle_muted(app: &AppHandle) {
     let muted = !get(app).muted.load(Ordering::Relaxed);
     set_muted(app, muted);
+}
+
+/// Stimmprofil liegt neben der Wake-Word-Datei.
+pub fn voice_profile_path() -> std::path::PathBuf {
+    wakeword_path().with_file_name("stimmprofil.json")
 }
 
 pub fn wakeword_ready() -> bool {

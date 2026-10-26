@@ -31,6 +31,9 @@ npm run dev      # Entwicklung (Overlay mit Live-Reload)
 npm run build    # Installer: target\release\bundle\nsis\Panco_0.1.0_x64-setup.exe
 ```
 
+Der Installer enthält `panco.exe` und den Absturz-Wächter `panco-waechter.exe` (wird vorher mitgebaut).
+Ohne Wächter neben `panco.exe` läuft Panco einfach ohne Neustart-Schutz.
+
 Tests (laufen auch unter Linux/macOS): `cargo test` im Ordner `pc-app`.
 
 ## Erste Schritte nach dem Start
@@ -51,9 +54,8 @@ Alle Daten liegen in `%APPDATA%\Panco` (config.json, logs, models, wakeword).
 
 ## Messen
 
-```powershell
-powershell -ExecutionPolicy Bypass -File ..\tools\measure.ps1 -Voice
-```
+Doppelklick auf `tools\Messen.cmd` (Panco muss laufen, Einstellungsfenster zu). Das Fenster bleibt offen,
+die Zusammenfassung steht zusätzlich in `tools\panco-messung.txt`.
 
 ## Vorschau-Build aus Linux
 

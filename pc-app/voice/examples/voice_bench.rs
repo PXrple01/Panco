@@ -65,6 +65,9 @@ fn main() {
         keep_model_secs: 3,
         prompt: "Panco, öffne Deadlock. Starte Counter-Strike 2. Lautstärke auf 30 Prozent. Nächstes Lied. Such Build Guides. Fahr den PC herunter. Discord, Spotify, Steam.".into(),
         phrases: vec![],
+        loopback_check: false,
+        speaker_check: false,
+        profile_path: std::env::temp_dir().join("panco-bench-stimmprofil.json"),
     };
     let (etx, erx) = channel();
     let voice = VoiceService::start(cfg, Source::Injected { rate: 16_000 }, move |e| {

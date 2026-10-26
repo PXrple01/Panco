@@ -4,14 +4,18 @@
 //! - `resample`  → 16 kHz Mono
 //! - `vad`       Sprachaktivität (Energie, adaptiv)
 //! - `wake`      Wake-Word "Panco" (rustpotter, selbst eingesprochen)
+//! - `loopback`  Systemton-Abgleich (kam "Panco" aus den Lautsprechern?)
+//! - `speaker`   optionale Sprecherprüfung (Stimmprofil aus den Wake-Word-Proben)
 //! - `stt`       whisper.cpp, Modell auf Abruf; `stt_windows` als Vergleich
-//! - `tts`       Windows-Sprachausgabe (SAPI)
+//! - `tts`       Windows-Sprachausgabe (Tonhöhe/Tempo einstellbar)
 //! - `pipeline`  Zustandsautomat, eigener Thread
 
 pub mod capture;
+pub mod loopback;
 pub mod model;
 mod pipeline;
 pub mod resample;
+pub mod speaker;
 pub mod stt;
 #[cfg(windows)]
 mod stt_windows;
@@ -55,8 +59,10 @@ pub enum MicState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Purpose {
-    /// Ein Befehl.
+    /// Ein Befehl (Push-to-Talk).
     Command,
+    /// Ein Befehl nach dem Wake-Word – kann eine Fehlaktivierung sein.
+    Wake,
     /// Antwort auf eine Rückfrage (ja/nein).
     Answer,
 }
@@ -76,6 +82,12 @@ pub struct VoiceConfig {
     pub prompt: String,
     /// Phrasenliste für die Windows-Erkennung.
     pub phrases: Vec<String>,
+    /// "Panco" aus den Lautsprechern (Systemton) ignorieren.
+    pub loopback_check: bool,
+    /// Nur auf die eigene Stimme reagieren (Stimmprofil nötig).
+    pub speaker_check: bool,
+    /// Stimmprofil (24 Merkmale, keine Audiodaten); entsteht beim Einsprechen.
+    pub profile_path: PathBuf,
 }
 
 #[derive(Debug)]
@@ -87,6 +99,8 @@ pub enum Ctl {
     ListenOnce,
     /// Laufende Aufnahme verwerfen (Overlay weggeklickt).
     Cancel,
+    /// Systemton einspeisen (nur bei `Source::Injected`: Tests, Messwerkzeug), Rate in Hz.
+    LoopbackAudio(Vec<f32>, u32),
     /// Eine Wake-Word-Probe aufnehmen.
     TrainStart,
     TrainCancel,
@@ -99,6 +113,8 @@ pub enum Event {
     Wake {
         score: f32,
     },
+    /// "Panco" erkannt, aber verworfen (Aktivierungs-Schutz).
+    WakeRejected(Rejected),
     /// Pegel 0..1 während der Aufnahme (~10×/s).
     Level(f32),
     /// Nichts (Verständliches) gesagt.
@@ -115,6 +131,15 @@ pub enum Event {
     Error(String),
 }
 
+/// Warum eine Aktivierung verworfen wurde.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rejected {
+    /// "Panco" kam auch im Systemton vor (Lautsprecher, Stream, Video).
+    Speakers,
+    /// Stimme passt nicht zum Stimmprofil.
+    OtherVoice,
+}
+
 /// Messwerte für das Diagnosefenster.
 #[derive(Default)]
 pub struct Stats {
@@ -122,6 +147,15 @@ pub struct Stats {
     pub wake_audio_ns: AtomicU64,
     pub whisper_loaded: AtomicBool,
     pub last: Mutex<Option<Transcript>>,
+    /// Punktzahl der letzten Wake-Word-Erkennung
+    pub last_wake: Mutex<Option<f32>>,
+    pub rejected_speakers: AtomicU64,
+    pub rejected_voice: AtomicU64,
+    /// Systemton-Mitschnitt aktiv?
+    pub loopback_active: AtomicBool,
+    /// Rechenzeit der Schutzprüfungen (Summe, ns) und Anzahl
+    pub guard_ns: AtomicU64,
+    pub guard_runs: AtomicU64,
 }
 
 impl Stats {
@@ -155,6 +189,11 @@ impl VoiceService {
     /// Audio einspeisen (nur bei `Source::Injected`: Tests, Messwerkzeug).
     pub fn inject(&self, samples: Vec<f32>) {
         let _ = self.tx.send(pipeline::Msg::Audio(samples));
+    }
+
+    /// Systemton einspeisen (nur bei `Source::Injected`).
+    pub fn inject_loopback(&self, samples: Vec<f32>, rate: u32) {
+        self.send(Ctl::LoopbackAudio(samples, rate));
     }
 
     pub fn stats(&self) -> &Arc<Stats> {

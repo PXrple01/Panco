@@ -12,6 +12,8 @@ use std::collections::HashMap;
 use std::path::Path;
 
 pub const SAMPLES_NEEDED: usize = 6;
+/// Mindest-Sicherheit: empfindlicher als das lässt sich das Wake-Word nicht stellen.
+pub const MIN_THRESHOLD: f32 = 0.35;
 const MFCC_SIZE: u16 = 16;
 
 pub struct WakeDetector {

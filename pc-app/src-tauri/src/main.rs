@@ -5,6 +5,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod autostart;
 mod crash;
 mod data;
 mod hotkeys;
@@ -13,6 +14,7 @@ mod maintenance;
 mod overlay;
 mod settings;
 mod setup;
+mod system;
 mod tray;
 mod voice;
 
@@ -60,12 +62,40 @@ pub fn reload_config(app: &AppHandle) {
     voice::apply(app);
 }
 
+/// Startet panco-waechter neben dieser panco.exe. `false` = nicht vorhanden → ohne Wächter weiter.
+fn start_watchdog(args: &[String]) -> bool {
+    let Ok(exe) = std::env::current_exe() else { return false };
+    let name = if cfg!(windows) { "panco-waechter.exe" } else { "panco-waechter" };
+    let watchdog = exe.with_file_name(name);
+    if !watchdog.is_file() {
+        crash::note("panco-waechter fehlt – Panco läuft ohne Neustart-Schutz.");
+        return false;
+    }
+    let pass = args.iter().filter(|a| *a == "--autostart");
+    std::process::Command::new(watchdog)
+        .arg("--log")
+        .arg(data_dir().join("logs").join("absturz.log"))
+        .arg("--")
+        .arg(&exe)
+        .arg("--app")
+        .args(pass)
+        .spawn()
+        .is_ok()
+}
+
 fn main() {
     crash::install(data_dir().join("logs"));
+    let args: Vec<String> = std::env::args().skip(1).collect();
     let (config, cfg_err) = Config::load_or_create(&config_path());
     if let Some(e) = cfg_err {
         eprintln!("[panco] {e}");
     }
+    // Ohne "--app" übernimmt der winzige Wächter (panco-waechter.exe): Er startet Panco als
+    // Kindprozess und startet es nach einem Absturz neu. Dieser Start-Prozess endet sofort.
+    if !args.iter().any(|a| a == "--app") && config.system.watchdog && start_watchdog(&args) {
+        return;
+    }
+    let autostart = config.system.autostart;
     let log = ActionLog::new(Some(data_dir().join("logs")));
     let engine = Arc::new(Engine::new(platform::native(), config, log));
 
@@ -83,6 +113,7 @@ fn main() {
             ipc::overlay_size,
             ipc::overlay_drag,
             ipc::overlay_dismiss,
+            ipc::window_action,
             settings::status,
             settings::appearance,
             settings::set_overlay,
@@ -93,6 +124,8 @@ fn main() {
             settings::download_model,
             settings::train_start,
             settings::train_cancel,
+            system::system_status,
+            system::set_system,
             setup::setup_state,
             setup::setup_save,
             setup::setup_finish,
@@ -110,11 +143,15 @@ fn main() {
             data::trash_entries,
             data::trash_restore,
         ])
-        .setup(|app| {
+        .setup(move |app| {
             voice::start(app.handle());
             tray::create(app.handle())?;
             hotkeys::register_all(app.handle());
             maintenance::start(app.handle());
+            // Autostart-Eintrag aktuell halten (zeigt immer auf diese panco.exe).
+            if let Err(e) = autostart::sync(autostart) {
+                crash::note(&format!("Autostart nicht einstellbar: {e}"));
+            }
             // Erster Start: Ordner für Papierkorb, Backup und Notizen wählen lassen.
             if !crate::engine(app.handle()).config().setup.done {
                 setup::open(app.handle());

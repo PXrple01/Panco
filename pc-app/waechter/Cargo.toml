@@ -1,0 +1,10 @@
+[package]
+name = "panco-waechter"
+description = "Winziger Absturz-Wächter für Panco (nur Standardbibliothek)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "panco-waechter"
+path = "src/main.rs"

@@ -14,6 +14,7 @@
   alle Kindprozesse (msedgewebview2.exe). CPU = Prozent EINES Kerns im Mittel über die Phase.
 
 .EXAMPLE
+  Doppelklick auf Messen.cmd (empfohlen), oder:
   powershell -NoProfile -ExecutionPolicy Bypass -File tools\measure.ps1 -Seconds 30
 #>
 param(
@@ -24,6 +25,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Profil-Fehler oder Ausführungsrichtlinie sollen die Messung nicht abbrechen: Messen.cmd startet
+# PowerShell mit -NoProfile -ExecutionPolicy Bypass.
 
 function Get-PancoTree {
   $root = Get-Process -Name panco -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -80,33 +83,50 @@ function Press-Hotkey([string]$Hint) {
   }
 }
 
-Write-Host "Panco-Messung: $Seconds s pro Phase`n"
-# Im Leerlauf darf kein Panco-Fenster offen sein (Einstellungen, Overlay) – sonst zählt WebView2 mit.
-$tries = 0
-while ((Get-Sample).Names -match 'msedgewebview2') {
-  if (++$tries -gt 2) {
-    Write-Host "WebView2 läuft weiter, obwohl kein Fenster offen ist – bitte so an Claude melden. Messe trotzdem." -ForegroundColor Yellow
-    break
-  }
-  Write-Host "Ein Panco-Fenster ist noch offen (z. B. Einstellungen oder Overlay). Bitte schließen." -ForegroundColor Yellow
-  Read-Host "Dann Enter drücken" | Out-Null
-  Start-Sleep -Seconds 3
-}
 $results = @()
-$results += Measure-Phase 'Leerlauf (kein Fenster)'
-Press-Hotkey 'Overlay öffnen (Strg+Leertaste)'
-$results += Measure-Phase 'Overlay offen'
-Press-Hotkey 'Overlay schließen (Strg+Leertaste oder Esc)'
-Start-Sleep -Seconds 5   # WebView2 braucht einen Moment zum Beenden
-$results += Measure-Phase 'Overlay geschlossen'
+try {
+  Write-Host "Panco-Messung: $Seconds s pro Phase`n"
+  # Im Leerlauf darf kein Panco-Fenster offen sein (Einstellungen, Overlay) – sonst zählt WebView2 mit.
+  $tries = 0
+  while ((Get-Sample).Names -match 'msedgewebview2') {
+    if (++$tries -gt 2) {
+      Write-Host "WebView2 läuft weiter, obwohl kein Fenster offen ist – bitte so an Claude melden. Messe trotzdem." -ForegroundColor Yellow
+      break
+    }
+    Write-Host "Ein Panco-Fenster ist noch offen (z. B. Einstellungen oder Overlay). Bitte schließen." -ForegroundColor Yellow
+    Read-Host "Dann Enter drücken" | Out-Null
+    Start-Sleep -Seconds 3
+  }
+  # Der Wächter (panco-waechter.exe) ist ein eigener, winziger Prozess.
+  $w = Get-Process -Name panco-waechter -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($w) {
+    $wp = Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Where-Object { [int]$_.IDProcess -eq $w.Id }
+    $results += [pscustomobject]@{ Phase = 'Wächter (panco-waechter)'; 'RAM privat (MB)' = [math]::Round($wp.WorkingSetPrivate / 1MB, 2); 'CPU (% 1 Kern)' = 0; Prozesse = "1: panco-waechter" }
+    Write-Host ("Wächter: {0:N2} MB privat`n" -f ($wp.WorkingSetPrivate / 1MB))
+  }
+  $results += Measure-Phase 'Leerlauf (kein Fenster)'
+  Press-Hotkey 'Overlay öffnen (Strg+Leertaste)'
+  $results += Measure-Phase 'Overlay offen'
+  Press-Hotkey 'Overlay schließen (Strg+Leertaste oder Esc)'
+  Start-Sleep -Seconds 5   # WebView2 braucht einen Moment zum Beenden
+  $results += Measure-Phase 'Overlay geschlossen'
 
-if ($Voice) {
-  Read-Host "Gleich: sag nach Enter deutlich `"Panco, öffne <ein Spiel>`" (oder halte Strg+Alt+Leertaste und sprich). Enter"
-  $results += Measure-Phase 'Sprachbefehl (Whisper geladen)'
-  Write-Host "Warte $($KeepModelSecs + 5) s, bis Whisper freigegeben ist ..."
-  Start-Sleep -Seconds ($KeepModelSecs + 5)
-  $results += Measure-Phase 'Nach Freigabe von Whisper'
+  if ($Voice) {
+    Read-Host "Gleich: sag nach Enter deutlich `"Panco, wie spät ist es?`" (oder halte Strg+Alt+Leertaste und sprich). Enter"
+    $results += Measure-Phase 'Sprachbefehl (Whisper geladen)'
+    Write-Host "Warte $($KeepModelSecs + 5) s, bis Whisper freigegeben ist ..."
+    Start-Sleep -Seconds ($KeepModelSecs + 5)
+    $results += Measure-Phase 'Nach Freigabe von Whisper'
+  }
+} catch {
+  Write-Host "`nFehler: $($_.Exception.Message)" -ForegroundColor Red
+  Write-Host "Zeile $($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line.Trim())" -ForegroundColor DarkGray
+  $results += [pscustomobject]@{ Phase = 'FEHLER'; 'RAM privat (MB)' = 0; 'CPU (% 1 Kern)' = 0; Prozesse = $_.Exception.Message }
+} finally {
+  $json = $results | ConvertTo-Json -Compress
+  $file = Join-Path $PSScriptRoot 'panco-messung.txt'
+  Set-Content -Path $file -Value $json -Encoding UTF8
+  Write-Host "`nZusammenfassung (zum Kopieren, steht auch in $file):"
+  Write-Host $json
+  Read-Host "`nFertig – Enter schließt das Fenster" | Out-Null
 }
-
-Write-Host "Zusammenfassung (zum Kopieren):"
-$results | ConvertTo-Json -Compress | Write-Host

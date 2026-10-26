@@ -21,10 +21,14 @@ pub fn open(app: &AppHandle) {
     }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
+        // Eigene Glas-Titelleiste statt Windows-Rahmen; Schatten + runde Ecken kommen von Windows 11.
         let built = WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::App("settings.html".into()))
-            .title("Panco – Einstellungen & Diagnose")
-            .inner_size(560.0, 760.0)
-            .min_inner_size(460.0, 520.0)
+            .title("Panco – Einstellungen")
+            .inner_size(980.0, 700.0)
+            .min_inner_size(760.0, 520.0)
+            .decorations(false)
+            .shadow(true)
+            .background_color(tauri::window::Color(8, 6, 14, 255))
             .center()
             .build();
         if let Err(e) = built {

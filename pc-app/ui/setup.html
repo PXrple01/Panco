@@ -4,37 +4,55 @@
   <meta charset="utf-8" />
   <title>Panco – Ersteinrichtung</title>
 </head>
-<body>
-  <main class="page">
-    <header class="head">
-      <div id="avatar" class="head__avatar"></div>
-      <div>
-        <h1>Hallo, ich bin Panco.</h1>
-        <p class="dim">Kurz einrichten – alles lässt sich später in den Einstellungen ändern.</p>
-      </div>
-    </header>
+<body class="glass-app">
+  <div class="aurora" aria-hidden="true">
+    <span class="orb orb--1"></span><span class="orb orb--2"></span><span class="orb orb--3"></span>
+  </div>
 
-    <div id="step-folders">
-      <div id="folders"></div>
-      <section class="card">
-        <h2>Wohnort <span class="dim small">(optional)</span></h2>
-        <p class="dim small">Für das Wetter beim Guten-Morgen. Wird erst genutzt, wenn du das einschaltest.</p>
-        <input id="city" class="path-input" placeholder="z. B. Hamburg" maxlength="80" />
-      </section>
-      <p class="error" id="error" hidden></p>
-      <div class="actions">
-        <button id="save" class="btn btn--accent" type="button">Speichern & weiter</button>
-      </div>
+  <header class="titlebar" data-drag>
+    <div class="titlebar__brand" data-drag><span class="brand-gem"></span>Panco · Ersteinrichtung</div>
+    <div class="titlebar__buttons">
+      <button class="winbtn" data-win="min" type="button" title="Minimieren" aria-label="Minimieren">
+        <svg viewBox="0 0 12 12"><path d="M2.5 6h7" /></svg>
+      </button>
+      <button class="winbtn winbtn--close" data-win="close" type="button" title="Schließen" aria-label="Schließen">
+        <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg>
+      </button>
     </div>
+  </header>
 
-    <section class="card" id="step-done" hidden>
-      <h2>Fast fertig!</h2>
-      <p>Jetzt noch die Stimme: Sprachmodell herunterladen (57 MB, einmalig) und sechsmal „Panco“ sagen.</p>
-      <p class="dim small">Panco läuft ab jetzt im Infobereich (der Panda unten rechts). Strg + Leertaste öffnet die Befehlszeile.</p>
-      <div class="actions">
-        <button id="finish" class="btn btn--accent" type="button">Weiter zur Spracheinrichtung</button>
+  <main class="setup">
+    <div class="setup__inner">
+      <header class="setup__hero">
+        <div id="avatar" class="setup__avatar"></div>
+        <h1>Hallo, ich bin Panco.</h1>
+        <p>Kurz einrichten – alles lässt sich später in den Einstellungen ändern.</p>
+      </header>
+
+      <div class="panel is-entering" id="step-folders">
+        <div id="folders"></div>
+        <section class="card">
+          <h2>Wohnort <span class="dim small">optional</span></h2>
+          <p class="dim small">Für das Wetter beim Guten-Morgen. Wird erst genutzt, wenn du das einschaltest.</p>
+          <div class="path-row" style="grid-template-columns: 1fr; margin: 12px 0 0">
+            <input id="city" class="path-input" placeholder="z. B. Hamburg" maxlength="80" />
+          </div>
+        </section>
+        <p class="error" id="error" hidden></p>
+        <div class="actions">
+          <button id="save" class="btn btn--accent" type="button">Speichern & weiter</button>
+        </div>
       </div>
-    </section>
+
+      <section class="card" id="step-done" hidden>
+        <h2>Fast fertig!</h2>
+        <p>Jetzt noch die Stimme: Sprachmodell herunterladen (57 MB, einmalig) und sechsmal „Panco“ sagen.</p>
+        <p class="dim small">Panco läuft ab jetzt im Infobereich (der Panda unten rechts). Strg + Leertaste öffnet die Befehlszeile.</p>
+        <div class="actions">
+          <button id="finish" class="btn btn--accent" type="button">Weiter zur Spracheinrichtung</button>
+        </div>
+      </section>
+    </div>
   </main>
   <script type="module" src="./src/setup.ts"></script>
 </body>

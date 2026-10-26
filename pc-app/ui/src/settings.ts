@@ -5,6 +5,7 @@ import "./settings.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { PancoAvatar } from "../../../shared/avatar/panco";
+import { initChrome, showTab } from "./chrome";
 
 interface VoiceSettings {
   mode: "wake" | "push_to_talk" | "off";
@@ -18,6 +19,23 @@ interface VoiceSettings {
   tts_pitch: number;
   tts_rate: number;
   barge_in: boolean;
+  loopback_check: boolean;
+  speaker_check: boolean;
+}
+
+interface SystemStatus {
+  system: { autostart: boolean; watchdog: boolean };
+  autostart_active: boolean;
+  watched: boolean;
+  protection: {
+    last_wake: number | null;
+    rejected_speakers: number;
+    rejected_voice: number;
+    loopback_active: boolean;
+    guard_ms: number | null;
+    profile_ready: boolean;
+  };
+  crash_log: string[];
 }
 
 type Anchor = "top_left" | "top_center" | "top_right" | "bottom_left" | "bottom_center" | "bottom_right" | "center" | "custom";
@@ -147,7 +165,16 @@ function renderModels(s: Status) {
   }
 }
 
+const FOOT: Record<Status["mic"], string> = {
+  off: "Mikro aus",
+  wake: "Hört auf „Panco“",
+  recording: "Hört zu …",
+  muted: "Mikro stumm",
+};
+
 function render(s: Status) {
+  $("foot-status").textContent = s.enabled ? FOOT[s.mic] : "Not-Aus aktiv";
+  $("live-dot").classList.toggle("is-off", !s.enabled || s.mic === "off" || s.mic === "muted");
   const p = s.process;
   $("s-proc").textContent = p ? `${fmt(p.own_mb)} MB RAM (privat)` : "nicht messbar";
   $("s-web").textContent = p
@@ -368,6 +395,80 @@ listen<string>("panco://voice-error", (e) => {
   } else showError(e.payload);
 });
 
-new PancoAvatar($("avatar"), { reduced: true });
+// ---- Schutz & Start ----
+let system: SystemStatus["system"] | null = null;
+let guardTimer = 0;
+
+async function loadGuard() {
+  if (!voice) await refresh();
+  const st = await invoke<SystemStatus>("system_status");
+  if (!system) {
+    system = st.system;
+    $<HTMLInputElement>("sys-autostart").checked = st.system.autostart;
+    $<HTMLInputElement>("sys-watchdog").checked = st.system.watchdog;
+    $<HTMLInputElement>("guard-loop").checked = voice?.loopback_check ?? true;
+    $<HTMLInputElement>("guard-voice").checked = voice?.speaker_check ?? false;
+  }
+  const g = st.protection;
+  $<HTMLInputElement>("guard-voice").disabled = !g.profile_ready && !voice?.speaker_check;
+  $("guard-voice-hint").textContent = g.profile_ready
+    ? "einfaches Stimmprofil aus dem Einsprechen – fremde Stimmen werden meist erkannt"
+    : "erst Wake-Word neu einsprechen – dabei entsteht dein Stimmprofil";
+  $("sys-status").textContent = [
+    st.watched ? "Läuft unter dem Wächter" : "Läuft ohne Wächter (wirkt ab dem nächsten Start)",
+    st.autostart_active ? "Autostart eingetragen" : "kein Autostart",
+    g.loopback_active ? "Systemton-Abgleich aktiv" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  $("g-last").textContent = g.last_wake === null ? "–" : `Punktzahl ${fmt(g.last_wake, 2)}`;
+  $("g-time").textContent = g.guard_ms === null ? "–" : `${fmt(g.guard_ms, 1)} ms`;
+  $("g-speakers").textContent = String(g.rejected_speakers);
+  $("g-voice").textContent = String(g.rejected_voice);
+  const log = $("crash-log");
+  log.replaceChildren(
+    ...(st.crash_log.length ? st.crash_log : ["Keine Abstürze – alles ruhig."]).map((line) => {
+      const li = document.createElement("li");
+      li.textContent = line;
+      return li;
+    }),
+  );
+}
+
+async function saveSystem(patch: Partial<SystemStatus["system"]>) {
+  if (!system) return;
+  system = { ...system, ...patch };
+  try {
+    await invoke("set_system", { system });
+    showError(null);
+    loadGuard();
+  } catch (e) {
+    showError(String(e));
+  }
+}
+$<HTMLInputElement>("sys-autostart").addEventListener("change", (e) => saveSystem({ autostart: (e.target as HTMLInputElement).checked }));
+$<HTMLInputElement>("sys-watchdog").addEventListener("change", (e) => saveSystem({ watchdog: (e.target as HTMLInputElement).checked }));
+$<HTMLInputElement>("guard-loop").addEventListener("change", (e) => save({ loopback_check: (e.target as HTMLInputElement).checked }));
+$<HTMLInputElement>("guard-voice").addEventListener("change", (e) => save({ speaker_check: (e.target as HTMLInputElement).checked }));
+
+document.addEventListener("panco-tab", (e) => {
+  const name = (e as CustomEvent<string>).detail;
+  showTab(name);
+  window.clearInterval(guardTimer);
+  if (name === "guard") {
+    loadGuard().catch((err) => showError(String(err)));
+    guardTimer = window.setInterval(() => document.visibilityState === "visible" && loadGuard().catch(() => {}), 2000);
+  }
+});
+
+initChrome();
+const avatar = new PancoAvatar($("avatar"));
+// Panda ruht, solange das Fenster nicht aktiv ist.
+const rest = () => avatar.setResting(document.visibilityState !== "visible" || !document.hasFocus());
+addEventListener("focus", rest);
+addEventListener("blur", rest);
+document.addEventListener("visibilitychange", rest);
+rest();
+refresh();
 drawDots();
 syncPolling();

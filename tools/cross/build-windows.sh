@@ -3,7 +3,7 @@
 # (siehe pc-app/README.md) – das ist schneller, nutzt optimierte CPU-Befehle und braucht keine Tricks.
 #
 # Voraussetzungen (Ubuntu): mingw-w64 cmake clang, rustup target add x86_64-pc-windows-gnu
-# Ergebnis: pc-app/target/x86_64-pc-windows-gnu/release/{panco.exe,WebView2Loader.dll}
+# Ergebnis: pc-app/target/x86_64-pc-windows-gnu/release/{panco.exe,panco-waechter.exe,WebView2Loader.dll}
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 TARGET=x86_64-pc-windows-gnu
@@ -23,7 +23,10 @@ export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-L native=$SHIM -C link-arg
 
 npm run -s -w pc-app ui:build --prefix "$ROOT"
 cd "$ROOT/pc-app"
-build() { cargo build -p panco --release --target $TARGET --features tauri/custom-protocol; }
+build() {
+  cargo build -p panco --release --target $TARGET --features tauri/custom-protocol &&
+    cargo build -p panco-waechter --release --target $TARGET
+}
 if ! build; then
   # MinGW-CMake benennt die ggml-Bibliotheken "ggml.a" statt "libggml.a" – Kopien anlegen, nochmal.
   for dir in target/$TARGET/release/build/whisper-rs-sys-*/out/lib; do
@@ -32,4 +35,4 @@ if ! build; then
   done
   build
 fi
-ls -la target/$TARGET/release/panco.exe target/$TARGET/release/WebView2Loader.dll
+ls -la target/$TARGET/release/panco.exe target/$TARGET/release/panco-waechter.exe target/$TARGET/release/WebView2Loader.dll

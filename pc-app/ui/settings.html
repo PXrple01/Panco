@@ -2,239 +2,390 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <title>Panco – Einstellungen & Diagnose</title>
+  <title>Panco – Einstellungen</title>
 </head>
-<body>
-  <main class="page">
-    <header class="head">
-      <div id="avatar" class="head__avatar"></div>
-      <div>
-        <h1>Panco</h1>
-        <p class="dim" id="headline">Einstellungen & Diagnose</p>
-      </div>
-    </header>
+<body class="glass-app">
+  <div class="aurora" aria-hidden="true">
+    <span class="orb orb--1"></span><span class="orb orb--2"></span><span class="orb orb--3"></span>
+  </div>
 
-    <nav class="tabs" role="tablist">
-      <button class="tab" data-tab="voice" type="button">Sprache & Diagnose</button>
-      <button class="tab" data-tab="look" type="button">Aussehen & Stimme</button>
-      <button class="tab" data-tab="files" type="button">Ordner & Backup</button>
-      <button class="tab" data-tab="notes" type="button">Notizen</button>
-      <button class="tab" data-tab="log" type="button">Protokoll</button>
-      <button class="tab" data-tab="trash" type="button">Papierkorb</button>
-    </nav>
-
-    <div class="panel" data-panel="voice">
-    <section class="card">
-      <h2>Diagnose <span class="dim small">(live, nur solange dieses Fenster offen ist)</span></h2>
-      <dl class="stats">
-        <dt>Panco</dt><dd id="s-proc">–</dd>
-        <dt>Fenster (WebView2)</dt><dd id="s-web">–</dd>
-        <dt>CPU gesamt</dt><dd id="s-cpu">–</dd>
-        <dt>Mikrofon</dt><dd id="s-mic">–</dd>
-        <dt>Wake-Word</dt><dd id="s-wake">–</dd>
-        <dt>Whisper</dt><dd id="s-whisper">–</dd>
-        <dt>Zuletzt erkannt</dt><dd id="s-last">–</dd>
-      </dl>
-    </section>
-
-    <section class="card">
-      <h2>Sprachsteuerung</h2>
-      <div class="field">
-        <span class="label">Modus</span>
-        <div class="seg" role="radiogroup" id="mode">
-          <label><input type="radio" name="mode" value="wake" /> Wake-Word „Panco“</label>
-          <label><input type="radio" name="mode" value="push_to_talk" /> Push-to-Talk</label>
-          <label><input type="radio" name="mode" value="off" /> Aus</label>
-        </div>
-      </div>
-      <label class="field row">
-        <span class="label">Mikrofon stumm</span>
-        <input type="checkbox" id="muted" class="switch" />
-      </label>
-      <div class="field">
-        <span class="label">Spracherkennung</span>
-        <div class="seg" role="radiogroup" id="engine">
-          <label><input type="radio" name="engine" value="whisper" /> Whisper (lokal)</label>
-          <label><input type="radio" name="engine" value="windows" /> Windows (Vergleich)</label>
-        </div>
-        <p class="dim small">Windows nutzt nur eine feste Befehlsliste, damit kein Audio an Microsoft geht.</p>
-      </div>
-      <div class="field">
-        <span class="label">Whisper-Modell</span>
-        <ul class="models" id="models"></ul>
-      </div>
-      <label class="field">
-        <span class="label">Wake-Word-Empfindlichkeit <span class="dim" id="th-val"></span></span>
-        <input type="range" id="threshold" min="0.3" max="0.7" step="0.05" />
-        <span class="dim small range-legend"><span>empfindlich</span><span>streng</span></span>
-      </label>
-      <label class="field row">
-        <span class="label">Overlay bei Sprachbefehlen zeigen</span>
-        <input type="checkbox" id="overlay" class="switch" />
-      </label>
-      <label class="field row">
-        <span class="label">Whisper geladen halten (Sekunden)</span>
-        <input type="number" id="keep" min="5" max="3600" step="5" class="num" />
-      </label>
-      <p class="dim small">Länger geladen = schnellere Antwort beim nächsten Befehl, kostet aber ca. 100 MB RAM, solange Whisper geladen ist.</p>
-    </section>
-
-    <section class="card">
-      <h2>Wake-Word einsprechen</h2>
-      <p class="dim" id="train-status">Sag sechsmal „Panco“, damit Panco deine Stimme erkennt. Gespeichert werden nur Merkmale, keine Aufnahmen.</p>
-      <div class="train">
-        <div class="dots" id="train-dots"></div>
-        <button class="btn btn--accent" id="train-start" type="button">Einsprechen starten</button>
-        <button class="btn" id="train-cancel" type="button" hidden>Abbrechen</button>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Tastenkürzel</h2>
-      <dl class="stats">
-        <dt>Overlay</dt><dd id="hk-overlay">–</dd>
-        <dt>Push-to-Talk (halten)</dt><dd id="hk-ptt">–</dd>
-        <dt>Mikrofon stumm</dt><dd id="hk-mute">–</dd>
-        <dt>Not-Aus</dt><dd id="hk-kill">–</dd>
-      </dl>
-      <p class="dim small">Änderbar in <code id="cfg-path"></code></p>
-    </section>
+  <header class="titlebar" data-drag>
+    <div class="titlebar__brand" data-drag><span class="brand-gem"></span>Panco</div>
+    <div class="titlebar__buttons">
+      <button class="winbtn" data-win="min" type="button" title="Minimieren" aria-label="Minimieren">
+        <svg viewBox="0 0 12 12"><path d="M2.5 6h7" /></svg>
+      </button>
+      <button class="winbtn" data-win="max" type="button" title="Maximieren" aria-label="Maximieren">
+        <svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" rx="1.5" /></svg>
+      </button>
+      <button class="winbtn winbtn--close" data-win="close" type="button" title="Schließen" aria-label="Schließen">
+        <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg>
+      </button>
     </div>
+  </header>
 
-    <div class="panel" data-panel="look" hidden>
-      <section class="card">
-        <h2>Panco auf dem Bildschirm</h2>
-        <label class="field row">
-          <span class="label">Bei „Panco, …“ nur kleines Icon mit dem Erkannten</span>
-          <input type="checkbox" id="ov-compact" class="switch" />
-        </label>
-        <label class="field">
-          <span class="label">Bildschirm</span>
-          <select id="ov-monitor" class="select"></select>
-        </label>
-        <label class="field">
-          <span class="label">Position</span>
-          <select id="ov-anchor" class="select">
-            <option value="top_left">oben links</option>
-            <option value="top_center">oben Mitte</option>
-            <option value="top_right">oben rechts</option>
-            <option value="bottom_left">unten links</option>
-            <option value="bottom_center">unten Mitte</option>
-            <option value="bottom_right">unten rechts</option>
-            <option value="center">Mitte</option>
-            <option value="custom" id="ov-custom">eigene Stelle (gezogen)</option>
-          </select>
-        </label>
-        <label class="field">
-          <span class="label">Größe <span class="dim" id="ov-scale-val"></span></span>
-          <input type="range" id="ov-scale" min="0.75" max="1.5" step="0.05" />
-          <span class="dim small range-legend"><span>klein</span><span>groß</span></span>
-        </label>
-        <label class="field row">
-          <span class="label">Antwort mindestens so lange zeigen (Sekunden)</span>
-          <input type="number" id="ov-hide" min="0.5" max="30" step="0.5" class="num" />
-        </label>
-        <label class="field row">
-          <span class="label">Animationen reduzieren</span>
-          <input type="checkbox" id="ov-reduce" class="switch" />
-        </label>
-        <p class="dim small">Panco am Gesicht ziehen, um ihn zu verschieben – die Stelle wird gemerkt. ✕ oder Esc schließt ihn sofort.</p>
-        <div class="actions">
-          <button id="ov-preview" class="btn" type="button">Ausprobieren</button>
-          <span class="dim small" id="ov-status"></span>
+  <div class="shell">
+    <aside class="sidebar glass">
+      <div class="profile">
+        <div id="avatar" class="profile__avatar"></div>
+        <div class="profile__text">
+          <div class="profile__name">Panco</div>
+          <div class="profile__sub" id="headline">Dein Gaming-Begleiter</div>
         </div>
-      </section>
-
-      <section class="card">
-        <h2>Stimme</h2>
-        <label class="field row">
-          <span class="label">Antworten vorlesen</span>
-          <input type="checkbox" id="speak" class="switch" />
-        </label>
-        <label class="field">
-          <span class="label">Stimme</span>
-          <select id="tts-voice" class="select"></select>
-        </label>
-        <label class="field">
-          <span class="label">Tonhöhe <span class="dim" id="tts-pitch-val"></span></span>
-          <input type="range" id="tts-pitch" min="0.5" max="2" step="0.05" />
-          <span class="dim small range-legend"><span>tief</span><span>hoch</span></span>
-        </label>
-        <label class="field">
-          <span class="label">Tempo <span class="dim" id="tts-rate-val"></span></span>
-          <input type="range" id="tts-rate" min="0.6" max="1.8" step="0.05" />
-          <span class="dim small range-legend"><span>langsam</span><span>schnell</span></span>
-        </label>
-        <label class="field row">
-          <span class="label">Bei Rückfragen dazwischenreden</span>
-          <input type="checkbox" id="barge" class="switch" />
-        </label>
-        <p class="dim small">Panco hört bei einer Rückfrage schon zu, während er noch spricht – „ja“ oder „nein“ beendet seinen Satz. Seine eigene Stimme aus den Lautsprechern erkennt er und ignoriert sie.</p>
-        <div class="actions">
-          <button id="tts-preview" class="btn" type="button">Probe hören</button>
-        </div>
-      </section>
-    </div>
-
-    <div class="panel" data-panel="files" hidden>
-      <div id="folders"></div>
-      <div class="actions">
-        <button id="files-save" class="btn btn--accent" type="button">Ordner speichern</button>
-        <span class="dim small" id="files-status"></span>
       </div>
-      <section class="card">
-        <h2>Backups</h2>
-        <ul class="rows" id="backup-list"></ul>
-        <div class="actions">
-          <button id="backup-now" class="btn" type="button">Jetzt sichern</button>
-          <button id="backup-open" class="btn" type="button">Backup-Ordner öffnen</button>
-          <span class="dim small" id="backup-status"></span>
-        </div>
-      </section>
-    </div>
 
-    <div class="panel" data-panel="notes" hidden>
-      <section class="card">
-        <h2>Notizen</h2>
-        <p class="dim small">Geschützte Notizen (🔒) sind verschlüsselt und nur hier am PC sichtbar – Panco liest sie nie vor.</p>
-        <div class="notes">
-          <ul class="rows note-list" id="note-list"></ul>
-          <div class="note-editor">
-            <div class="note-head"><strong id="note-title">–</strong><span class="dim small" id="note-status"></span></div>
-            <textarea id="note-text" spellcheck="false" disabled></textarea>
-            <div class="actions">
-              <button id="note-save" class="btn btn--accent" type="button" disabled>Speichern</button>
+      <nav class="nav" role="tablist" aria-label="Bereiche">
+        <span class="nav__pill" aria-hidden="true"></span>
+        <button class="tab" data-tab="voice" type="button">
+          <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
+          Sprache
+        </button>
+        <button class="tab" data-tab="look" type="button">
+          <svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z" /><path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" /></svg>
+          Aussehen & Stimme
+        </button>
+        <button class="tab" data-tab="guard" type="button">
+          <svg viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z" /><path d="M8.8 12.2l2.2 2.2 4.4-4.6" /></svg>
+          Schutz & Start
+        </button>
+        <button class="tab" data-tab="files" type="button">
+          <svg viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.2h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" /></svg>
+          Ordner & Backup
+        </button>
+        <button class="tab" data-tab="notes" type="button">
+          <svg viewBox="0 0 24 24"><path d="M6 3.5h9l3.5 3.5v13.5H6z" /><path d="M14.5 3.5V7.5h4M9 12h6M9 15.5h6" /></svg>
+          Notizen
+        </button>
+        <button class="tab" data-tab="log" type="button">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>
+          Protokoll
+        </button>
+        <button class="tab" data-tab="trash" type="button">
+          <svg viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13" /><path d="M10.5 11v5.5M13.5 11v5.5" /></svg>
+          Papierkorb
+        </button>
+      </nav>
+
+      <div class="sidebar__foot">
+        <span class="live" id="live-dot"></span>
+        <span id="foot-status">Bereit</span>
+      </div>
+    </aside>
+
+    <main class="content" id="content">
+      <!-- ================= Sprache ================= -->
+      <div class="panel" data-panel="voice">
+        <header class="hero">
+          <div class="hero__icon"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></div>
+          <div>
+            <h1>Sprache</h1>
+            <p>Wake-Word, Spracherkennung und Live-Diagnose.</p>
+          </div>
+        </header>
+
+        <section class="card">
+          <h2>Diagnose <span class="chip"><span class="live"></span> live</span></h2>
+          <div class="tiles">
+            <div class="tile"><span class="tile__label">Panco</span><span class="tile__value" id="s-proc">–</span></div>
+            <div class="tile"><span class="tile__label">CPU gesamt</span><span class="tile__value" id="s-cpu">–</span></div>
+            <div class="tile tile--wide"><span class="tile__label">Fenster (WebView2)</span><span class="tile__value" id="s-web">–</span></div>
+            <div class="tile tile--wide"><span class="tile__label">Mikrofon</span><span class="tile__value" id="s-mic">–</span></div>
+            <div class="tile tile--wide"><span class="tile__label">Wake-Word</span><span class="tile__value" id="s-wake">–</span></div>
+            <div class="tile tile--wide"><span class="tile__label">Whisper</span><span class="tile__value" id="s-whisper">–</span></div>
+            <div class="tile tile--full"><span class="tile__label">Zuletzt erkannt</span><span class="tile__value" id="s-last">–</span></div>
+          </div>
+          <p class="dim small">Wird nur gemessen, solange dieses Fenster offen ist.</p>
+        </section>
+
+        <section class="card">
+          <h2>Sprachsteuerung</h2>
+          <div class="field">
+            <span class="label">Modus</span>
+            <div class="seg" role="radiogroup" id="mode">
+              <label><input type="radio" name="mode" value="wake" /> Wake-Word „Panco“</label>
+              <label><input type="radio" name="mode" value="push_to_talk" /> Push-to-Talk</label>
+              <label><input type="radio" name="mode" value="off" /> Aus</label>
             </div>
           </div>
-        </div>
+          <label class="field row">
+            <span class="label">Mikrofon stumm</span>
+            <input type="checkbox" id="muted" class="switch" />
+          </label>
+          <div class="field">
+            <span class="label">Spracherkennung</span>
+            <div class="seg" role="radiogroup" id="engine">
+              <label><input type="radio" name="engine" value="whisper" /> Whisper (lokal)</label>
+              <label><input type="radio" name="engine" value="windows" /> Windows (Vergleich)</label>
+            </div>
+            <p class="dim small">Windows nutzt nur eine feste Befehlsliste, damit kein Audio an Microsoft geht.</p>
+          </div>
+          <div class="field">
+            <span class="label">Whisper-Modell</span>
+            <ul class="models" id="models"></ul>
+          </div>
+          <label class="field">
+            <span class="label">Wake-Word-Empfindlichkeit <span class="value" id="th-val"></span></span>
+            <input type="range" id="threshold" min="0.35" max="0.7" step="0.05" />
+            <span class="range-legend"><span>empfindlich</span><span>streng</span></span>
+          </label>
+          <label class="field row">
+            <span class="label">Overlay bei Sprachbefehlen zeigen</span>
+            <input type="checkbox" id="overlay" class="switch" />
+          </label>
+          <label class="field row">
+            <span class="label">Whisper geladen halten (Sekunden)</span>
+            <input type="number" id="keep" min="5" max="3600" step="5" class="num" />
+          </label>
+          <p class="dim small">Länger geladen = schnellere Antwort beim nächsten Befehl, kostet aber ca. 100 MB RAM, solange Whisper geladen ist.</p>
+        </section>
+
+        <section class="card">
+          <h2>Wake-Word einsprechen</h2>
+          <p class="dim" id="train-status">Sag sechsmal „Panco“, damit Panco deine Stimme erkennt. Gespeichert werden nur Merkmale, keine Aufnahmen.</p>
+          <div class="train">
+            <div class="dots" id="train-dots"></div>
+            <button class="btn btn--accent" id="train-start" type="button">Einsprechen starten</button>
+            <button class="btn" id="train-cancel" type="button" hidden>Abbrechen</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Tastenkürzel</h2>
+          <div class="keys">
+            <div class="key"><span>Overlay</span><kbd id="hk-overlay">–</kbd></div>
+            <div class="key"><span>Push-to-Talk (halten)</span><kbd id="hk-ptt">–</kbd></div>
+            <div class="key"><span>Mikrofon stumm</span><kbd id="hk-mute">–</kbd></div>
+            <div class="key"><span>Not-Aus</span><kbd id="hk-kill">–</kbd></div>
+          </div>
+          <p class="dim small">Änderbar in <code id="cfg-path"></code></p>
+        </section>
+      </div>
+
+      <!-- ================= Aussehen & Stimme ================= -->
+      <div class="panel" data-panel="look" hidden>
+        <header class="hero">
+          <div class="hero__icon"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z" /><path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" /></svg></div>
+          <div>
+            <h1>Aussehen & Stimme</h1>
+            <p>Wo Panco erscheint, wie groß er ist und wie er klingt.</p>
+          </div>
+        </header>
+
+        <section class="card">
+          <h2>Panco auf dem Bildschirm</h2>
+          <label class="field row">
+            <span class="label">Bei „Panco, …“ nur kleines Icon mit dem Erkannten</span>
+            <input type="checkbox" id="ov-compact" class="switch" />
+          </label>
+          <div class="grid2">
+            <label class="field">
+              <span class="label">Bildschirm</span>
+              <select id="ov-monitor" class="select"></select>
+            </label>
+            <label class="field">
+              <span class="label">Position</span>
+              <select id="ov-anchor" class="select">
+                <option value="top_left">oben links</option>
+                <option value="top_center">oben Mitte</option>
+                <option value="top_right">oben rechts</option>
+                <option value="bottom_left">unten links</option>
+                <option value="bottom_center">unten Mitte</option>
+                <option value="bottom_right">unten rechts</option>
+                <option value="center">Mitte</option>
+                <option value="custom" id="ov-custom">eigene Stelle (gezogen)</option>
+              </select>
+            </label>
+          </div>
+          <label class="field">
+            <span class="label">Größe <span class="value" id="ov-scale-val"></span></span>
+            <input type="range" id="ov-scale" min="0.75" max="1.5" step="0.05" />
+            <span class="range-legend"><span>klein</span><span>groß</span></span>
+          </label>
+          <label class="field row">
+            <span class="label">Antwort mindestens so lange zeigen (Sekunden)</span>
+            <input type="number" id="ov-hide" min="0.5" max="30" step="0.5" class="num" />
+          </label>
+          <label class="field row">
+            <span class="label">Animationen reduzieren</span>
+            <input type="checkbox" id="ov-reduce" class="switch" />
+          </label>
+          <p class="dim small">Panco am Gesicht ziehen, um ihn zu verschieben – die Stelle wird gemerkt. ✕ oder Esc schließt ihn sofort.</p>
+          <div class="actions">
+            <button id="ov-preview" class="btn btn--accent" type="button">Ausprobieren</button>
+            <span class="dim small" id="ov-status"></span>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Stimme</h2>
+          <label class="field row">
+            <span class="label">Antworten vorlesen</span>
+            <input type="checkbox" id="speak" class="switch" />
+          </label>
+          <label class="field">
+            <span class="label">Stimme</span>
+            <select id="tts-voice" class="select"></select>
+          </label>
+          <div class="grid2">
+            <label class="field">
+              <span class="label">Tonhöhe <span class="value" id="tts-pitch-val"></span></span>
+              <input type="range" id="tts-pitch" min="0.5" max="2" step="0.05" />
+              <span class="range-legend"><span>tief</span><span>hoch</span></span>
+            </label>
+            <label class="field">
+              <span class="label">Tempo <span class="value" id="tts-rate-val"></span></span>
+              <input type="range" id="tts-rate" min="0.6" max="1.8" step="0.05" />
+              <span class="range-legend"><span>langsam</span><span>schnell</span></span>
+            </label>
+          </div>
+          <label class="field row">
+            <span class="label">Bei Rückfragen dazwischenreden</span>
+            <input type="checkbox" id="barge" class="switch" />
+          </label>
+          <p class="dim small">Panco hört bei einer Rückfrage schon zu, während er noch spricht – „ja“ oder „nein“ beendet seinen Satz. Seine eigene Stimme aus den Lautsprechern erkennt er und ignoriert sie.</p>
+          <div class="actions">
+            <button id="tts-preview" class="btn btn--accent" type="button">Probe hören</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- ================= Schutz & Start ================= -->
+      <div class="panel" data-panel="guard" hidden>
+        <header class="hero">
+          <div class="hero__icon"><svg viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z" /><path d="M8.8 12.2l2.2 2.2 4.4-4.6" /></svg></div>
+          <div>
+            <h1>Schutz & Start</h1>
+            <p>Panco startet mit Windows, steht nach Abstürzen wieder auf und reagiert nur auf dich.</p>
+          </div>
+        </header>
+
+        <section class="card">
+          <h2>Start & Wächter</h2>
+          <label class="field row">
+            <span class="label">Mit Windows starten</span>
+            <input type="checkbox" id="sys-autostart" class="switch" />
+          </label>
+          <label class="field row">
+            <span class="label">Absturz-Wächter <span class="hint">startet Panco nach einem Absturz neu</span></span>
+            <input type="checkbox" id="sys-watchdog" class="switch" />
+          </label>
+          <p class="dim small" id="sys-status"></p>
+        </section>
+
+        <section class="card">
+          <h2>Aktivierungs-Schutz</h2>
+          <label class="field row">
+            <span class="label">„Panco“ aus Lautsprechern ignorieren <span class="hint">Abgleich mit dem Systemton – Spiele, Streams, Videos</span></span>
+            <input type="checkbox" id="guard-loop" class="switch" />
+          </label>
+          <label class="field row">
+            <span class="label">Nur auf meine Stimme reagieren <span class="hint" id="guard-voice-hint">einfaches Stimmprofil aus dem Einsprechen</span></span>
+            <input type="checkbox" id="guard-voice" class="switch" />
+          </label>
+          <div class="tiles">
+            <div class="tile"><span class="tile__label">Letztes „Panco“</span><span class="tile__value" id="g-last">–</span></div>
+            <div class="tile"><span class="tile__label">Prüfzeit</span><span class="tile__value" id="g-time">–</span></div>
+            <div class="tile"><span class="tile__label">Aus Lautsprechern ignoriert</span><span class="tile__value" id="g-speakers">0</span></div>
+            <div class="tile"><span class="tile__label">Fremde Stimme ignoriert</span><span class="tile__value" id="g-voice">0</span></div>
+          </div>
+          <p class="dim small">Mindest-Sicherheit: Die Empfindlichkeit lässt sich nicht unter 0,35 stellen. Hört Panco nach „Panco“ keinen Befehl, bleibt er still und protokolliert das Gehörte nicht.</p>
+        </section>
+
+        <section class="card">
+          <h2>Absturzprotokoll</h2>
+          <ul class="rows mono" id="crash-log"></ul>
+        </section>
+      </div>
+
+      <!-- ================= Ordner & Backup ================= -->
+      <div class="panel" data-panel="files" hidden>
+        <header class="hero">
+          <div class="hero__icon"><svg viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.2h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" /></svg></div>
+          <div>
+            <h1>Ordner & Backup</h1>
+            <p>Wo Panco frei arbeiten darf, sein Papierkorb und deine Sicherungen.</p>
+          </div>
+        </header>
+        <div id="folders"></div>
         <div class="actions">
-          <input id="note-new-title" class="path-input" placeholder="Neue Notiz: Titel" maxlength="80" />
-          <label class="dim small"><input type="checkbox" id="note-new-secret" /> geschützt</label>
-          <button id="note-new" class="btn" type="button">Anlegen</button>
-          <button id="notes-open" class="btn" type="button">Ordner öffnen</button>
+          <button id="files-save" class="btn btn--accent" type="button">Ordner speichern</button>
+          <span class="dim small" id="files-status"></span>
         </div>
-      </section>
-    </div>
+        <section class="card">
+          <h2>Backups</h2>
+          <ul class="rows" id="backup-list"></ul>
+          <div class="actions">
+            <button id="backup-now" class="btn btn--accent" type="button">Jetzt sichern</button>
+            <button id="backup-open" class="btn" type="button">Backup-Ordner öffnen</button>
+            <span class="dim small" id="backup-status"></span>
+          </div>
+        </section>
+      </div>
 
-    <div class="panel" data-panel="log" hidden>
-      <section class="card">
-        <h2>Aktionsprotokoll</h2>
-        <p class="dim small">Alles, was Panco getan hat – mit „Rückgängig“, wo es geht. Notizinhalte sind ausgeblendet.</p>
-        <ul class="rows log-list" id="log-list"></ul>
-      </section>
-    </div>
+      <!-- ================= Notizen ================= -->
+      <div class="panel" data-panel="notes" hidden>
+        <header class="hero">
+          <div class="hero__icon"><svg viewBox="0 0 24 24"><path d="M6 3.5h9l3.5 3.5v13.5H6z" /><path d="M14.5 3.5V7.5h4M9 12h6M9 15.5h6" /></svg></div>
+          <div>
+            <h1>Notizen</h1>
+            <p>Alles, was du Panco diktiert hast. Geschützte Notizen bleiben verschlüsselt.</p>
+          </div>
+        </header>
+        <section class="card">
+          <p class="dim small">Geschützte Notizen (🔒) sind verschlüsselt und nur hier am PC sichtbar – Panco liest sie nie vor.</p>
+          <div class="notes">
+            <ul class="rows note-list" id="note-list"></ul>
+            <div class="note-editor">
+              <div class="note-head"><strong id="note-title">–</strong><span class="dim small" id="note-status"></span></div>
+              <textarea id="note-text" spellcheck="false" disabled></textarea>
+              <div class="actions">
+                <button id="note-save" class="btn btn--accent" type="button" disabled>Speichern</button>
+              </div>
+            </div>
+          </div>
+          <div class="actions">
+            <input id="note-new-title" class="path-input" placeholder="Neue Notiz: Titel" maxlength="80" />
+            <label class="check"><input type="checkbox" id="note-new-secret" /> geschützt</label>
+            <button id="note-new" class="btn" type="button">Anlegen</button>
+            <button id="notes-open" class="btn" type="button">Ordner öffnen</button>
+          </div>
+        </section>
+      </div>
 
-    <div class="panel" data-panel="trash" hidden>
-      <section class="card">
-        <h2>Panco-Papierkorb</h2>
-        <p class="dim small" id="trash-hint"></p>
-        <ul class="rows" id="trash-list"></ul>
-        <div class="actions"><button id="trash-open" class="btn" type="button">Papierkorb-Ordner öffnen</button></div>
-      </section>
-    </div>
+      <!-- ================= Protokoll ================= -->
+      <div class="panel" data-panel="log" hidden>
+        <header class="hero">
+          <div class="hero__icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg></div>
+          <div>
+            <h1>Protokoll</h1>
+            <p>Alles, was Panco getan hat – mit „Rückgängig“, wo es geht.</p>
+          </div>
+        </header>
+        <section class="card">
+          <p class="dim small">Notizinhalte sind ausgeblendet.</p>
+          <ul class="rows log-list" id="log-list"></ul>
+        </section>
+      </div>
 
-    <p class="error" id="error" hidden></p>
-  </main>
+      <!-- ================= Papierkorb ================= -->
+      <div class="panel" data-panel="trash" hidden>
+        <header class="hero">
+          <div class="hero__icon"><svg viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13" /><path d="M10.5 11v5.5M13.5 11v5.5" /></svg></div>
+          <div>
+            <h1>Papierkorb</h1>
+            <p>Panco löscht nie endgültig – hier liegt alles bis zum Ende der Frist.</p>
+          </div>
+        </header>
+        <section class="card">
+          <p class="dim small" id="trash-hint"></p>
+          <ul class="rows" id="trash-list"></ul>
+          <div class="actions"><button id="trash-open" class="btn" type="button">Papierkorb-Ordner öffnen</button></div>
+        </section>
+      </div>
+
+      <p class="error" id="error" hidden></p>
+    </main>
+  </div>
   <script type="module" src="./src/settings.ts"></script>
   <script type="module" src="./src/settings-data.ts"></script>
 </body>

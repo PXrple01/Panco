@@ -30,11 +30,11 @@ def tree(root):
     return out
 
 
-def sample(root):
+def sample(root, alone=False):
     """(USS in MB, CPU-Sekunden, Prozessnamen). USS = privater Speicher, vergleichbar mit
     "Arbeitsspeicher (privater Arbeitssatz)" im Windows-Task-Manager."""
     rss, cpu, names = 0, 0.0, []
-    for p in tree(root):
+    for p in [root] if alone else tree(root):
         try:
             for line in open(f"/proc/{p}/smaps_rollup"):
                 if line.startswith(("Private_Clean:", "Private_Dirty:")):
@@ -48,11 +48,30 @@ def sample(root):
     return rss / 1024, cpu, names
 
 
-def measure(root, label, seconds):
-    _, c0, _ = sample(root)
+class Proc:
+    def __init__(self, pid):
+        self.pid = pid
+
+
+def find(exe, arg=None):
+    """Laufenden Prozess dieses Programms finden (optional mit Argument)."""
+    for p in os.listdir("/proc"):
+        if not p.isdigit():
+            continue
+        try:
+            cmd = open(f"/proc/{p}/cmdline", "rb").read().split(b"\0")
+        except OSError:
+            continue
+        if cmd and cmd[0].decode(errors="replace") == exe and (arg is None or arg.encode() in cmd):
+            return Proc(int(p))
+    return None
+
+
+def measure(root, label, seconds, alone=False):
+    _, c0, _ = sample(root, alone)
     t0 = time.time()
     time.sleep(seconds)
-    rss, c1, names = sample(root)
+    rss, c1, names = sample(root, alone)
     pct = (c1 - c0) / (time.time() - t0) * 100
     print(f"  {label:<34} RAM (USS) {rss:7.1f} MB   CPU {pct:5.2f} % eines Kerns   Prozesse: {', '.join(sorted(set(names)))}")
     return rss, pct
@@ -78,11 +97,16 @@ def main():
         reduced = "true" if os.environ.get("REDUCED") == "1" else "false"
         mode = os.environ.get("MODE", "push_to_talk")
         f.write(f'{{"overlay": {{"reduce_motion": {reduced}}}, "voice": {{"mode": "{mode}"}}, "setup": {{"done": true}}}}')
-    app = subprocess.Popen([exe], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    launcher = subprocess.Popen([exe], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:
         time.sleep(4)
+        # Der Start-Prozess übergibt an panco-waechter, der Panco ("--app") als Kind startet.
+        app = find(exe, "--app") or launcher
+        watchdog = find(os.path.join(os.path.dirname(exe), "panco-waechter"))
         mode = ("reduzierte Animationen" if os.environ.get("REDUCED") == "1" else "Standard") + ", Sprachmodus " + os.environ.get("MODE", "push_to_talk")
         print(f"Panco unter Linux/Xvfb, Software-Rendering (Richtwert, nicht Windows!) – {secs} s je Phase, {mode}")
+        if watchdog:
+            measure(watchdog.pid, "Wächter (panco-waechter, allein)", secs, alone=True)
         measure(app.pid, "Leerlauf (Tray, kein Fenster)", secs)
         subprocess.run(["xdotool", "key", "ctrl+space"], env=env)
         time.sleep(3)
@@ -92,10 +116,16 @@ def main():
         time.sleep(3)
         measure(app.pid, "Overlay wieder geschlossen", secs)
     finally:
-        app.terminate()
-        app.wait(5)
+        for pid in tree(app.pid) if "app" in locals() else []:
+            try:
+                os.kill(pid, 15)
+            except OSError:
+                pass
+        if launcher.poll() is None:
+            launcher.terminate()
+        time.sleep(1)
         xvfb.terminate()
-        err = app.stderr.read().decode(errors="replace").strip()
+        err = launcher.stderr.read().decode(errors="replace").strip()
         if err:
             print("\nstderr:", err[:800])
 

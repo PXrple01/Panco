@@ -13,6 +13,7 @@ pub struct Config {
     pub voice: VoiceSettings,
     pub files: FileSettings,
     pub setup: SetupSettings,
+    pub system: SystemSettings,
     /// Programme, Webseiten und URIs, die Panco per Name öffnen darf.
     pub apps: Vec<AppAlias>,
     /// Kurznamen für Spiele, z. B. "cs" → "Counter-Strike 2".
@@ -23,6 +24,22 @@ pub struct Config {
     pub search_url: String,
     /// Wie lange eine Bestätigungsfrage gültig ist.
     pub confirm_timeout_secs: u64,
+}
+
+/// Start mit Windows und Absturz-Wächter.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct SystemSettings {
+    /// Mit Windows starten (Eintrag unter HKCU\…\Run)
+    pub autostart: bool,
+    /// Kleiner Wächter-Prozess startet Panco nach einem Absturz neu
+    pub watchdog: bool,
+}
+
+impl Default for SystemSettings {
+    fn default() -> Self {
+        Self { autostart: true, watchdog: true }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,6 +95,10 @@ pub struct VoiceSettings {
     pub tts_rate: f32,
     /// Bei Rückfragen schon zuhören, während Panco noch spricht
     pub barge_in: bool,
+    /// "Panco" aus Lautsprechern/Stream ignorieren (Systemton-Abgleich)
+    pub loopback_check: bool,
+    /// Nur auf die eigene Stimme reagieren (einfaches Stimmprofil aus dem Einsprechen)
+    pub speaker_check: bool,
 }
 
 impl Default for VoiceSettings {
@@ -94,6 +115,8 @@ impl Default for VoiceSettings {
             tts_pitch: 1.4,
             tts_rate: 1.1,
             barge_in: true,
+            loopback_check: true,
+            speaker_check: false,
         }
     }
 }
@@ -241,6 +264,7 @@ impl Default for Config {
             voice: VoiceSettings::default(),
             files: FileSettings::default(),
             setup: SetupSettings::default(),
+            system: SystemSettings::default(),
             apps: vec![
                 app(&["discord"], "discord://", &[], Some("Discord.exe")),
                 app(&["spotify"], "spotify:", &[], Some("Spotify.exe")),

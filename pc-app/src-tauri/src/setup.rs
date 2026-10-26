@@ -17,8 +17,11 @@ pub fn open(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         let built = WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::App("setup.html".into()))
             .title("Panco – Ersteinrichtung")
-            .inner_size(620.0, 720.0)
-            .min_inner_size(480.0, 560.0)
+            .inner_size(720.0, 760.0)
+            .min_inner_size(520.0, 560.0)
+            .decorations(false)
+            .shadow(true)
+            .background_color(tauri::window::Color(8, 6, 14, 255))
             .center()
             .build();
         if let Err(e) = built {

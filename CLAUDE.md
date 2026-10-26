@@ -28,6 +28,19 @@ Diese Regeln sind verbindlich. Im Zweifel gilt: sicher und sparsam vor bequem.
 - Bildschirm, Position (Ecke) und Größe sind einstellbar; per Ziehen verschoben wird die Stelle gemerkt.
 - ✕/Esc schließt sofort und bricht Zuhören, Vorlesen und offene Rückfragen ab.
 
+## Design
+- Look: **klares Glas auf Schwarz mit lila Licht** (Apple-artig): Glas-Karten mit Lichtkante, treibende
+  Lichtkugeln, Seitenleiste mit gleitender Auswahl, iOS-Schalter, eigene Titelleiste. Kreativ, nicht schlicht.
+- Bewegung nur `transform`/`opacity`, nur bei sichtbarem und aktivem Fenster, `prefers-reduced-motion` beachten.
+
+## Zuverlässigkeit
+- `panco.exe` startet `panco-waechter.exe` (nur Standardbibliothek, < 1 MB RAM), der Panco als Kind startet und
+  blockierend auf das Ende wartet. Absturz → Neustart (1 s, 5 s, 30 s), nach 4 Abstürzen in 10 min aufgeben.
+  Code 0 (Beenden) und Code 1 (Task-Manager) → kein Neustart. Gründe stehen in `logs/absturz.log`.
+- Aktivierungs-Schutz: Wake-Word-Schwelle ≥ 0,35; "Panco" auch im Systemton (WASAPI-Loopback) → ignorieren;
+  optional Stimmprofil (24 MFCC-Werte, kein Audio); nach dem Wake-Word ohne "Panco" im Text und ohne
+  verständlichen Befehl → still bleiben, Gehörtes nicht protokollieren.
+
 ## Aktionen: drei Stufen (keine freie Shell)
 Es gibt **keine freie Shell-Ausführung**. Alle Aktionen sind definierte, validierte Module.
 
@@ -140,7 +153,7 @@ Windows (`tools/measure.ps1`); Werte aus der Linux-Entwicklungsumgebung klar als
 4. ✅ **Dateien, Notizen, Sicherheit der Daten:** Ersteinrichtung (Papierkorb-/Backup-Ordner, Wohnort), freigegebene
    Ordner, Dateisuche per Sprache mit Vorauswahl ("meine letzte Rechnung"), Panco-Papierkorb mit Frist,
    Stufe-2-Dateiaktionen, Notizen (verschlüsselt), Aktionsprotokoll mit Rückgängig, Backups
-5. **Zuverlässigkeit & Aktivierungs-Schutz:** Autostart + Wächter, Wake-Word-Sicherheit, Systemton-Abgleich,
+5. ✅ **Zuverlässigkeit & Aktivierungs-Schutz:** Autostart + Wächter, Wake-Word-Sicherheit, Systemton-Abgleich,
    optionale Sprecherprüfung
 6. **Spiele, Medien, Gedächtnis & Makros:** Spiel-Erkennung + Game Mode + Spielzeit, Lautstärke pro App,
    Spotify (optional Web-API), Kontext-Gedächtnis/Vorlieben-Regeln, eigene Befehle per Sprache (Einstellungsreiter),
@@ -159,4 +172,4 @@ Windows (`tools/measure.ps1`); Werte aus der Linux-Entwicklungsumgebung klar als
 14. **Abschluss:** README, Befehlsliste, Sicherheitskonzept, Messwerte
 
 Nach jeder Etappe committen (verständliche Nachricht) und Messwerte zeigen.
-Stand: Etappen 1–4 erledigt, als Nächstes Etappe 5.
+Stand: Etappen 1–5 erledigt, als Nächstes Etappe 6.

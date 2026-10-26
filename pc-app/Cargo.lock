@@ -3271,8 +3271,10 @@ version = "0.1.0"
 dependencies = [
  "cpal",
  "panco-core",
+ "realfft",
  "rustpotter",
  "serde",
+ "serde_json",
  "sha2 0.11.1",
  "thiserror 2.0.21",
  "ureq",
@@ -3280,6 +3282,10 @@ dependencies = [
  "windows",
  "windows-collections",
 ]
+
+[[package]]
+name = "panco-waechter"
+version = "0.1.0"
 
 [[package]]
 name = "pango"

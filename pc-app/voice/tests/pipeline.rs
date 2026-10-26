@@ -21,6 +21,9 @@ fn config(mode: Mode) -> VoiceConfig {
         keep_model_secs: 5,
         prompt: String::new(),
         phrases: vec![],
+        loopback_check: true,
+        speaker_check: false,
+        profile_path: tmp("stimmprofil.json"),
     }
 }
 
@@ -122,5 +125,55 @@ fn wake_word_training_writes_feature_file_only() {
     assert!(path.is_file());
     // Nach dem Training lauscht das Wake-Word (Mikro offen).
     assert!(wait_for(&rx, 2, |e| matches!(e, Event::Mic(MicState::Wake))).is_some());
+    let _ = std::fs::remove_file(path);
+}
+
+/// Kunstwort als Wake-Word: zwei "Silben" mit Grundton, Obertönen und Tonhöhenverlauf.
+fn word(variation: f32) -> Vec<f32> {
+    (0..16 * 700)
+        .map(|i| {
+            let t = i as f32 / 16_000.0;
+            let f0 = if t < 0.35 { 140.0 + 60.0 * t } else { 210.0 - 80.0 * (t - 0.35) } * (1.0 + variation);
+            let env = (std::f32::consts::PI * (t / 0.35).fract()).sin().max(0.0);
+            env * (1..8).map(|h| (2.0 * std::f32::consts::PI * f0 * h as f32 * t).sin() / h as f32).sum::<f32>() * 0.25
+        })
+        .collect()
+}
+
+fn padded(w: &[f32]) -> Vec<f32> {
+    let mut a = vec![0.0; 8_000];
+    a.extend_from_slice(w);
+    a.extend(vec![0.0; 16_000]);
+    a
+}
+
+#[test]
+fn wake_word_from_speakers_is_ignored() {
+    let path = tmp("guard.rpw");
+    let samples: Vec<Vec<f32>> = (0..5).map(|i| word(i as f32 * 0.004)).collect();
+    panco_voice::wake::train(&samples, 0.5, &path).unwrap();
+    let mut cfg = config(Mode::Wake);
+    cfg.wakeword_path = path.clone();
+    let (svc, rx) = start(cfg);
+
+    // Nur am Mikrofon → Panco wacht auf
+    feed(&svc, &padded(&word(0.002)));
+    assert!(wait_for(&rx, 5, |e| matches!(e, Event::Wake { .. })).is_some(), "Wake-Word am Mikro erkannt");
+    svc.send(Ctl::Cancel);
+
+    // Musik/Spielsound im Systemton stört nicht
+    let music: Vec<f32> = (0..16 * 3000).map(|i| 0.2 * (i as f32 * 0.17).sin() * (i as f32 * 0.0009).sin()).collect();
+    svc.inject_loopback(music, 16_000);
+    feed(&svc, &padded(&word(0.002)));
+    let e = wait_for(&rx, 5, |e| matches!(e, Event::Wake { .. } | Event::WakeRejected(_)));
+    assert!(matches!(e, Some(Event::Wake { .. })), "Musik im Systemton: {e:?}");
+    svc.send(Ctl::Cancel);
+
+    // Dasselbe Wort lief gerade auch über die Lautsprecher → ignoriert
+    svc.inject_loopback(padded(&word(0.003)), 16_000);
+    feed(&svc, &padded(&word(0.002)));
+    let e = wait_for(&rx, 5, |e| matches!(e, Event::Wake { .. } | Event::WakeRejected(_)));
+    assert!(matches!(e, Some(Event::WakeRejected(panco_voice::Rejected::Speakers))), "{e:?}");
+    assert_eq!(svc.stats().rejected_speakers.load(std::sync::atomic::Ordering::Relaxed), 1);
     let _ = std::fs::remove_file(path);
 }

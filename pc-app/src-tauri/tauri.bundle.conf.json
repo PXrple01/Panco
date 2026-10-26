@@ -1,0 +1,7 @@
+{
+  "bundle": {
+    "resources": {
+      "../target/release/panco-waechter.exe": "panco-waechter.exe"
+    }
+  }
+}

@@ -9,11 +9,13 @@
 //! Audio wird nur im Speicher gehalten und nach der Erkennung verworfen.
 
 use crate::capture::{self, Mic};
+use crate::loopback::{self, Loopback, Ring};
 use crate::resample::{Resampler, TARGET_RATE};
+use crate::speaker::VoiceProfile;
 use crate::stt::{Transcript, WhisperStt};
 use crate::vad::{Vad, FRAME};
 use crate::wake::{self, WakeDetector};
-use crate::{Ctl, Event, MicState, Mode, Purpose, Stats, SttEngine, VoiceConfig};
+use crate::{Ctl, Event, MicState, Mode, Purpose, Rejected, Stats, SttEngine, VoiceConfig};
 use std::collections::VecDeque;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
@@ -61,6 +63,13 @@ const RING: usize = 40_000;
 const WAKE_PREROLL: usize = 6_400; // 400 ms
 /// Etwas Luft vor dem erkannten Sprechbeginn.
 const ONSET_MARGIN: usize = 3_200; // 200 ms
+/// So weit zurück wird der Systemton nach "Panco" durchsucht (Lautsprecher-Latenz + Wortlänge).
+const LOOPBACK_MS: usize = 2_500;
+/// Unter diesem Pegel gilt der Systemton als still (dann keine Prüfung nötig).
+const LOOPBACK_QUIET: f32 = 0.003;
+/// Stimmprofil: bis zu diesem Abstand (1 = typische Streuung der eigenen Proben) gilt die Stimme
+/// als die eigene. Gemessen mit `speaker_eval`: eigene Stimme ≤ 1,8, fremde meist darüber.
+const SPEAKER_LIMIT: f32 = 1.8;
 
 struct Pipeline {
     cfg: VoiceConfig,
@@ -89,6 +98,12 @@ struct Pipeline {
     utterance_len: usize,
     last_level: Instant,
     train: Option<Vec<Vec<f32>>>,
+    /// Systemton-Mitschnitt (Windows) bzw. eingespeister Systemton (Tests)
+    loopback: Option<Loopback>,
+    injected_loop: Option<loopback::Shared>,
+    /// Zweiter Wake-Word-Detektor für den Systemton (erst beim ersten Bedarf geladen)
+    loop_wake: Option<WakeDetector>,
+    profile: Option<VoiceProfile>,
 }
 
 pub(crate) enum SttJob {
@@ -140,6 +155,10 @@ pub(crate) fn spawn(
         utterance_len: 0,
         last_level: Instant::now(),
         train: None,
+        loopback: None,
+        injected_loop: None,
+        loop_wake: None,
+        profile: None,
     };
     let handle = std::thread::Builder::new()
         .name("panco-voice".into())
@@ -212,6 +231,12 @@ impl Pipeline {
                 }
             }
             Ctl::ListenOnce => {}
+            Ctl::LoopbackAudio(samples, rate) => {
+                let ring = self
+                    .injected_loop
+                    .get_or_insert_with(|| std::sync::Arc::new(std::sync::Mutex::new(Ring::new(rate))));
+                ring.lock().unwrap().push(&samples);
+            }
             Ctl::Cancel => {
                 if matches!(self.state, State::Recording(ref rec) if !rec.training) {
                     self.state = State::Idle;
@@ -242,7 +267,53 @@ impl Pipeline {
         }
     }
 
+    /// Aktivierungs-Schutz direkt nach "Panco": aus den Lautsprechern? Fremde Stimme?
+    /// Läuft nur bei einem Treffer (einige Millisekunden), nicht dauerhaft.
+    fn guard(&mut self) -> Result<(), Rejected> {
+        let t0 = Instant::now();
+        let result = self.guard_checks();
+        self.stats.guard_ns.fetch_add(t0.elapsed().as_nanos() as u64, Ordering::Relaxed);
+        self.stats.guard_runs.fetch_add(1, Ordering::Relaxed);
+        result
+    }
+
+    fn guard_checks(&mut self) -> Result<(), Rejected> {
+        if self.cfg.loopback_check {
+            let ring = self.loopback.as_ref().map(|l| l.ring.clone()).or_else(|| self.injected_loop.clone());
+            let system = ring.and_then(|r| {
+                let r = r.lock().ok()?;
+                (r.level(LOOPBACK_MS) > LOOPBACK_QUIET).then(|| r.last_16k(LOOPBACK_MS))
+            });
+            if let Some(pcm) = system {
+                if self.loop_wake.is_none() {
+                    // Etwas nachsichtiger als am Mikrofon: im Zweifel lieber ignorieren.
+                    self.loop_wake = WakeDetector::load(&self.cfg.wakeword_path, self.cfg.threshold * 0.85).ok();
+                }
+                if let Some(det) = self.loop_wake.as_mut() {
+                    det.reset();
+                    let found = pcm.chunks(FRAME).any(|c| det.process(c).is_some());
+                    det.reset();
+                    if found {
+                        return Err(Rejected::Speakers);
+                    }
+                }
+            }
+        }
+        if self.cfg.speaker_check {
+            if let Some(profile) = &self.profile {
+                let take = (self.utterance_len + ONSET_MARGIN).clamp(8_000, 24_000).min(self.ring.len());
+                let word: Vec<f32> = self.ring.iter().skip(self.ring.len() - take).copied().collect();
+                if profile.score(&wake::trim_silence(&word)).is_some_and(|d| d > SPEAKER_LIMIT) {
+                    return Err(Rejected::OtherVoice);
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn reload_wake(&mut self) {
+        self.loop_wake = None;
+        self.profile = VoiceProfile::load(&self.cfg.profile_path);
         self.wake = None;
         if self.cfg.wakeword_path.is_file() {
             match WakeDetector::load(&self.cfg.wakeword_path, self.cfg.threshold) {
@@ -286,6 +357,17 @@ impl Pipeline {
             self.mic = None; // Stream fallen lassen = Mikrofon zu
             self.injected_open = false;
         }
+        // Systemton nur mitschneiden, solange das Wake-Word lauscht.
+        let want_loop = want && listening && self.cfg.loopback_check && matches!(self.source, Source::Microphone);
+        if want_loop && self.loopback.is_none() {
+            match loopback::open() {
+                Ok(l) => self.loopback = Some(l),
+                Err(e) => eprintln!("[panco] {e}"),
+            }
+        } else if !want_loop && self.loopback.is_some() {
+            self.loopback = None;
+        }
+        self.stats.loopback_active.store(self.loopback.is_some(), Ordering::Relaxed);
         let is_open = self.mic.is_some() || self.injected_open;
 
         let state = if self.cfg.muted {
@@ -371,8 +453,18 @@ impl Pipeline {
                 }
                 if let Some(score) = hit {
                     self.wake_fed = false;
+                    *self.stats.last_wake.lock().unwrap() = Some(score);
+                    if let Err(reason) = self.guard() {
+                        let counter = match reason {
+                            Rejected::Speakers => &self.stats.rejected_speakers,
+                            Rejected::OtherVoice => &self.stats.rejected_voice,
+                        };
+                        counter.fetch_add(1, Ordering::Relaxed);
+                        self.emit(Event::WakeRejected(reason));
+                        return;
+                    }
                     self.emit(Event::Wake { score });
-                    self.start_listening(Purpose::Command, false);
+                    self.start_listening(Purpose::Wake, false);
                     if let State::Recording(rec) = &mut self.state {
                         let take = (self.utterance_len + ONSET_MARGIN).min(self.ring.len());
                         rec.buf.extend(self.ring.iter().rev().take(take).rev());
@@ -431,7 +523,7 @@ impl Pipeline {
             // wird ein kurzes "Ja" gern zu "Jan." (gemessen mit stt_eval).
             let prompt = match rec.purpose {
                 Purpose::Answer => ANSWER_PROMPT.to_string(),
-                Purpose::Command => self.cfg.prompt.clone(),
+                Purpose::Command | Purpose::Wake => self.cfg.prompt.clone(),
             };
             let _ = self.stt_tx.send(SttJob::Whisper {
                 pcm: rec.buf,
@@ -456,7 +548,12 @@ impl Pipeline {
         if count >= wake::SAMPLES_NEEDED {
             let samples = self.train.take().unwrap_or_default();
             let result = wake::train(&samples, self.cfg.threshold, &self.cfg.wakeword_path);
-            drop(samples); // Aufnahmen verwerfen – nur die Merkmalsdatei bleibt
+            // Stimmprofil für die (optionale) Sprecherprüfung – 24 Zahlen, kein Audio.
+            if let Some(p) = VoiceProfile::build(&samples) {
+                let _ = p.save(&self.cfg.profile_path);
+                self.profile = Some(p);
+            }
+            drop(samples); // Aufnahmen verwerfen – nur Merkmalsdatei und Stimmprofil bleiben
             if result.is_ok() {
                 self.reload_wake();
             }

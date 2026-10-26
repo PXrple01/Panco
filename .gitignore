@@ -5,3 +5,4 @@ tools/out/
 *.log
 .DS_Store
 pc-app/src-tauri/gen/
+tools/panco-messung.txt

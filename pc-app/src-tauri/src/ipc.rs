@@ -72,3 +72,19 @@ pub async fn overlay_dismiss(app: AppHandle) {
     }
     overlay::hide(&app);
 }
+
+/// Eigene Titelleiste (Einstellungen, Ersteinrichtung): ziehen, minimieren, maximieren, schließen.
+#[tauri::command]
+pub fn window_action(window: tauri::WebviewWindow, action: String) -> Result<(), String> {
+    let r = match action.as_str() {
+        "drag" => window.start_dragging(),
+        "min" => window.minimize(),
+        "max" => match window.is_maximized() {
+            Ok(true) => window.unmaximize(),
+            _ => window.maximize(),
+        },
+        "close" => window.close(),
+        _ => return Err("unbekannte Fensteraktion".into()),
+    };
+    r.map_err(|e| e.to_string())
+}

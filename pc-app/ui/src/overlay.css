@@ -24,9 +24,27 @@ body {
   gap: 14px;
   padding: 16px 36px 16px 12px;
   border-radius: var(--pc-radius-l);
-  background: var(--pc-surface);
-  border: 1px solid var(--pc-line);
+  /* Klares, dunkles Glas mit Lichtkante – wie die Einstellungen */
+  background: linear-gradient(180deg, rgba(34, 27, 50, 0.9), rgba(13, 10, 21, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(124, 58, 237, 0.12);
   animation: card-in var(--pc-dur-med) var(--pc-ease-pop) both;
+}
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 35%, rgba(167, 139, 250, 0) 60%, rgba(167, 139, 250, 0.45));
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 /* Mini-Panco (bei "Panco, …"): kleines Icon + erkannter Text, keine Eingabezeile */
@@ -162,8 +180,9 @@ body {
   margin: 0;
   padding: 10px 14px;
   border-radius: var(--pc-radius-m) var(--pc-radius-m) var(--pc-radius-m) 4px;
-  background: var(--pc-surface-solid);
-  border: 1px solid var(--pc-line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   min-height: 1.4em;
   transform-origin: 0 100%;
   animation: bubble-pop var(--pc-dur-med) var(--pc-ease-pop) both;
@@ -267,8 +286,9 @@ kbd {
   box-shadow: var(--pc-glow);
 }
 .btn--yes {
-  background: var(--pc-accent);
-  border-color: var(--pc-accent-hi);
+  background: var(--pc-grad-accent);
+  border-color: rgba(221, 214, 254, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 6px 16px -6px rgba(124, 58, 237, 0.9);
 }
 .hint {
   color: var(--pc-text-dim);
