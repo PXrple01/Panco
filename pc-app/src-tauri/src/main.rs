@@ -5,6 +5,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod assistant;
 mod autostart;
 mod brain;
 mod crash;
@@ -40,6 +41,9 @@ pub fn engine(app: &AppHandle) -> Arc<Engine> {
 /// Not-Aus umschalten: Engine, Tray und Overlay synchron halten.
 pub fn set_enabled(app: &AppHandle, on: bool) {
     engine(app).set_enabled(on);
+    if !on {
+        assistant::cancel(app);
+    }
     voice::apply(app); // Not-Aus schließt sofort das Mikrofon
     tray::refresh(app);
     if !on {
@@ -108,6 +112,7 @@ fn main() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(Panco { engine })
+        .manage(Arc::new(panco_core::claude::Assistant::new()))
         .manage(settings::CpuSampler::default())
         .invoke_handler(tauri::generate_handler![
             ipc::send,
@@ -139,6 +144,12 @@ fn main() {
             brain::set_skip_confirm,
             brain::set_quiet,
             spotify::spotify_status,
+            assistant::claude_state,
+            assistant::claude_set_key,
+            assistant::claude_settings,
+            assistant::claude_reset,
+            assistant::claude_test,
+            assistant::script_remove,
             spotify::spotify_connect,
             spotify::spotify_disconnect,
             system::set_system,

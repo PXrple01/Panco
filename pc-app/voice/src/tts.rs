@@ -50,7 +50,8 @@ pub struct VoiceInfo {
 }
 
 enum Cmd {
-    Say(String, Option<Done>),
+    /// Text, Rückmeldung, Generation (veraltete Sätze nach `stop()` werden übersprungen)
+    Say(String, Option<Done>, u64),
     Configure(TtsSettings),
 }
 
@@ -65,6 +66,7 @@ pub struct Speaker {
     tx: Option<Sender<Cmd>>,
     speaking: Arc<AtomicBool>,
     stop: Arc<Stop>,
+    generation: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl Speaker {
@@ -74,6 +76,8 @@ impl Speaker {
         let speaking = Arc::new(AtomicBool::new(false));
         let stop = Arc::new(Stop::default());
         let (sp, st) = (speaking.clone(), stop.clone());
+        let generation = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let gen = generation.clone();
         let spawned = std::thread::Builder::new().name("panco-tts".into()).spawn(move || {
             let mut out = Output::default();
             loop {
@@ -88,7 +92,14 @@ impl Speaker {
                 };
                 match cmd {
                     Cmd::Configure(s) => out.configure(s),
-                    Cmd::Say(text, done) => {
+                    Cmd::Say(text, done, g) if g != gen.load(Ordering::SeqCst) => {
+                        // nach stop() eingereiht, aber schon überholt
+                        let _ = text;
+                        if let Some(done) = done {
+                            done();
+                        }
+                    }
+                    Cmd::Say(text, done, _) => {
                         *st.stopped.lock().unwrap() = false;
                         sp.store(true, Ordering::Relaxed);
                         out.say(&text, &st);
@@ -100,7 +111,7 @@ impl Speaker {
                 }
             }
         });
-        Self { tx: spawned.ok().map(|_| tx), speaking, stop }
+        Self { tx: spawned.ok().map(|_| tx), speaking, stop, generation }
     }
 
     pub fn configure(&self, settings: TtsSettings) {
@@ -113,9 +124,9 @@ impl Speaker {
     pub fn say(&self, text: &str, done: Option<Done>) {
         match &self.tx {
             Some(tx) => {
-                // Neuer Satz unterbricht den alten.
+                // Neuer Satz unterbricht den alten (und alles, was noch wartet).
                 self.stop();
-                let _ = tx.send(Cmd::Say(text.to_string(), done));
+                let _ = tx.send(Cmd::Say(text.to_string(), done, self.generation.load(Ordering::SeqCst)));
             }
             None => {
                 if let Some(d) = done {
@@ -125,8 +136,23 @@ impl Speaker {
         }
     }
 
-    /// Bricht die laufende Ausgabe sofort ab.
+    /// Hinten anstellen, ohne Laufendes zu unterbrechen (Claude: Satz für Satz, während er schreibt).
+    pub fn queue(&self, text: &str, done: Option<Done>) {
+        match &self.tx {
+            Some(tx) => {
+                let _ = tx.send(Cmd::Say(text.to_string(), done, self.generation.load(Ordering::SeqCst)));
+            }
+            None => {
+                if let Some(d) = done {
+                    d()
+                }
+            }
+        }
+    }
+
+    /// Bricht die laufende Ausgabe sofort ab – auch alles, was noch in der Warteschlange steht.
     pub fn stop(&self) {
+        self.generation.fetch_add(1, Ordering::SeqCst);
         if self.speaking.load(Ordering::Relaxed) {
             *self.stop.stopped.lock().unwrap() = true;
             self.stop.cv.notify_all();

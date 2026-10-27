@@ -174,6 +174,18 @@ fn command_phrases(engine: &Engine) -> Vec<String> {
     p
 }
 
+/// Avatar-Zustand setzen (z. B. "denkt nach", während Claude antwortet).
+pub fn set_avatar(app: &AppHandle, avatar: AvatarState) {
+    set_state(app, Some(avatar), None, None);
+}
+
+/// Satz hinten an die Sprachausgabe anstellen (Claude: Satz für Satz).
+pub fn queue(app: &AppHandle, text: &str) {
+    if let Some(v) = try_get(app) {
+        v.speaker.queue(text, None);
+    }
+}
+
 fn set_state(app: &AppHandle, avatar: Option<AvatarState>, mic: Option<MicState>, level: Option<f32>) {
     let Some(v) = try_get(app) else { return };
     if let Some(a) = avatar {
@@ -303,6 +315,12 @@ fn handle_transcript(app: &AppHandle, purpose: Purpose, text: &str) {
     }
 
     let id = format!("v{}", v.counter.fetch_add(1, Ordering::Relaxed) + 1);
+    // Versteht Panco das nicht selbst und ist Claude an: Claude antwortet (spricht schon selbst).
+    if let Some(msg) = crate::assistant::route(app, &id, &without_wake_word(&text), Source::Voice) {
+        set_state(app, Some(AvatarState::Idle), None, None);
+        overlay::emit(app, &msg);
+        return;
+    }
     let msg = crate::engine(app).command(&id, &text, Source::Voice);
     set_state(app, Some(AvatarState::Idle), None, None);
     overlay::emit(app, &msg);
@@ -347,6 +365,7 @@ fn without_wake_word(text: &str) -> String {
 
 /// Weggeklickt: Zuhören und Vorlesen sofort beenden.
 pub fn cancel(app: &AppHandle) {
+    crate::assistant::cancel(app);
     let Some(v) = try_get(app) else { return };
     *v.asked.lock().unwrap() = None;
     v.speaker.stop();

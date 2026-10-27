@@ -989,6 +989,7 @@ fn analyze_into(script: &str, places: &Places, cwd: &Path, a: &mut Analysis, dep
         analyze_into(sub, places, cwd, a, depth + 1);
     }
     let toks = &lx.toks;
+    let known = constant_vars(toks);
     let mut functions: Vec<String> = Vec::new();
     let mut commands: Vec<Command> = Vec::new();
     let mut moves_location = false;
@@ -1120,7 +1121,10 @@ fn analyze_into(script: &str, places: &Places, cwd: &Path, a: &mut Analysis, dep
                     a.raise(Class::Forbidden, "greift auf die PowerShell-Ausführung selbst zu");
                 }
                 if let Some(ci) = f.cmd {
-                    commands[ci].args.push(Arg::Dynamic);
+                    // fest zugewiesene Pfad-Variable ("$ziel = '…'") zählt wie der Pfad selbst
+                    commands[ci].args.push(
+                        known.iter().find(|(n, _)| n == v).map_or(Arg::Dynamic, |(_, val)| Arg::Lit(val.clone())),
+                    );
                 }
                 f.cmd_pos = false;
             }
@@ -1171,6 +1175,64 @@ fn analyze_into(script: &str, places: &Places, cwd: &Path, a: &mut Analysis, dep
     for c in &commands {
         classify(c, &functions, places, cwd, moves_location, a);
     }
+}
+
+/// Variablen, denen genau einmal ein fester Text zugewiesen wird (`$ziel = "$env:USERPROFILE\X"`),
+/// und die sonst nirgends verändert werden. Bei allem Unklaren: keine.
+fn constant_vars(toks: &[(Tok, bool)]) -> Vec<(String, String)> {
+    let at = |i: usize| toks.get(i).map(|t| &t.0);
+    // Variablen per Befehl/Parameter setzen → lieber gar nichts annehmen
+    let indirect = toks.iter().any(|(t, _)| match t {
+        Tok::Word(w) => {
+            let w = w.to_lowercase();
+            matches!(canonical(&w).as_str(), "set-variable" | "new-variable" | "clear-variable" | "remove-variable")
+                || ["-outvariable", "-ov", "-errorvariable", "-ev", "-pipelinevariable", "-pv", "-variable"]
+                    .iter()
+                    .any(|p| w == *p || w.starts_with(&format!("{p}:")))
+        }
+        Tok::Type(t) => t == "ref",
+        _ => false,
+    });
+    if indirect {
+        return Vec::new();
+    }
+    let mut assigned: Vec<(String, Option<String>)> = Vec::new();
+    for (i, (tok, _)) in toks.iter().enumerate() {
+        let Tok::Var(name) = tok else { continue };
+        let assigns = match (at(i + 1), at(i + 2)) {
+            (Some(Tok::Op("=")), _) => Some(i + 2),
+            (Some(Tok::Word(op)), Some(Tok::Op("="))) if ["+", "-", "*", "/", "%", "?"].contains(&op.as_str()) => None,
+            _ => {
+                // foreach ($x in …), param($x), Schleifen/Parameter verändern die Variable
+                let in_loop = matches!(at(i.wrapping_sub(1)), Some(Tok::Op("(")))
+                    && matches!(at(i.wrapping_sub(2)), Some(Tok::Word(w)) if ["foreach", "for", "param"].contains(&w.to_lowercase().as_str()));
+                if in_loop {
+                    assigned.push((name.clone(), None));
+                }
+                continue;
+            }
+        };
+        let value = assigns.and_then(|j| {
+            let end = matches!(at(j + 1), None | Some(Tok::Newline) | Some(Tok::Op(";")));
+            match (at(j), end) {
+                (Some(Tok::Str { text, dynamic: false }), true) => Some(text.clone()),
+                (Some(Tok::Str { text, dynamic: true }), true) => resolve_env(text),
+                (Some(Tok::Word(w)), true) if !w.starts_with('-') => Some(w.clone()),
+                _ => None,
+            }
+        });
+        assigned.push((name.clone(), value));
+    }
+    let mut out = Vec::new();
+    for (name, value) in &assigned {
+        let count = assigned.iter().filter(|(n, _)| n == name).count();
+        if count == 1 && !name.contains(':') && name != "_" {
+            if let Some(v) = value {
+                out.push((name.clone(), v.clone()));
+            }
+        }
+    }
+    out
 }
 
 /// `$env:USERPROFILE\Documents` & Co. auflösen; sonst `None` (= nicht eindeutig).
@@ -1366,6 +1428,33 @@ fn classify(c: &Command, functions: &[String], places: &Places, cwd: &Path, move
             let single = targets.len() == 1;
             targets.retain(|t| single || !matches!(t, Arg::Lit(s) if !s.contains(['\\', '/'])));
         }
+        // Verschieben/Löschen/Umbenennen aus der Pipeline verändert auch die Quelle.
+        let modifies_input = matches!(
+            name,
+            "move-item"
+                | "remove-item"
+                | "rename-item"
+                | "set-content"
+                | "add-content"
+                | "clear-content"
+                | "set-itemproperty"
+                | "remove-itemproperty"
+        );
+        if modifies_input && c.stage > 0 && !targets.is_empty() {
+            match c
+                .source_paths
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .find(|x| matches!(x, Arg::Lit(_) | Arg::Dynamic))
+            {
+                Some(src) => targets.push(src),
+                None => {
+                    a.raise(Class::Risky, format!("{name}: Quelle nicht eindeutig"));
+                    return;
+                }
+            }
+        }
         if targets.is_empty() && c.stage > 0 {
             // Ziel kommt aus der Pipeline: Pfade des ersten Befehls (z. B. Get-ChildItem X | Remove-Item)
             let src: Vec<Arg> = c
@@ -1494,6 +1583,12 @@ mod tests {
         assert_eq!(check("Set-Content notiz.txt 'hallo'").class, Class::ChangeAllowed);
         assert_eq!(check(&format!("'x' | Out-File '{r}/docs/x.txt'")).class, Class::ChangeAllowed);
         assert_eq!(check(&format!("Get-Date > '{r}/docs/datum.txt'")).class, Class::ChangeAllowed);
+        // fest zugewiesene Variable zählt wie der Pfad
+        let a = check(&format!(
+            "$ziel = '{r}/docs/Archiv'\nNew-Item -ItemType Directory -Path $ziel -Force | Out-Null\nGet-ChildItem '{r}/docs/Downloads' -File | Where-Object {{ $_.LastWriteTime -lt (Get-Date).AddDays(-30) }} | Move-Item -Destination $ziel"
+        ));
+        assert_eq!(a.class, Class::ChangeAllowed, "{:?}", a.reasons);
+        assert!(a.writes.iter().any(|w| w.ends_with("docs/Downloads")), "Quelle wird mitgesichert: {:?}", a.writes);
     }
 
     #[test]
@@ -1508,7 +1603,9 @@ mod tests {
             ("Stop-Process -Name Discord", "beenden"),
             ("Restart-Computer", "neu starten"),
             ("Get-ChildItem | Remove-Item", "nicht eindeutig"),
-            ("$x = 'a.txt'; Remove-Item $x", "nicht eindeutig"),
+            ("$x = 'a.txt'; $x = 'C:\\Windows\\b'; Remove-Item $x", "nicht eindeutig"),
+            ("foreach ($f in Get-ChildItem) { Remove-Item $f }", "nicht eindeutig"),
+            (&format!("Get-ChildItem C:\\Windows | Move-Item -Destination '{r}/docs/x'") as &str, "Windows"),
             ("Frobnicate-Thing", "unbekannter Befehl"),
             ("[IO.File]::WriteAllText('C:\\x.txt', 'a')", "Dateien über .NET"),
             ("New-Object -ComObject Shell.Application", "COM"),

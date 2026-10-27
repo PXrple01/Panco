@@ -38,6 +38,8 @@ const confirmRow = $<HTMLDivElement>("confirm");
 const confirmHint = $<HTMLSpanElement>("confirm-hint");
 const heard = $<HTMLParagraphElement>("heard");
 const choicesBox = $<HTMLDivElement>("choices");
+const activity = $<HTMLParagraphElement>("activity");
+const detail = $<HTMLPreElement>("detail");
 const mic = $<HTMLSpanElement>("mic");
 
 const REST_AFTER_MS = 10_000;
@@ -144,9 +146,34 @@ function handle(msg: ServerMessage) {
   }
   wake();
   switch (msg.type) {
+    case "stream":
+      // Claude schreibt noch: Text wächst, "activity" zeigt sichtbar, was Panco gerade liest.
+      window.clearInterval(typeTimer);
+      bubble.hidden = !msg.text;
+      bubble.classList.remove("is-error");
+      bubble.textContent = msg.text;
+      activity.hidden = !msg.activity;
+      activity.textContent = msg.activity ? `Panco ${msg.activity} …` : "";
+      if (msg.done) {
+        activity.hidden = true;
+        react("info");
+        if (settings.auto_hide_ms > 0 && !pendingConfirm) {
+          hideTimer = window.setTimeout(hide, Math.min(20_000, Math.max(settings.auto_hide_ms, msg.text.length * 60)));
+        }
+      }
+      fitSize();
+      break;
     case "reply":
+      // Testlauf in der Sandbox: die offene Rückfrage zum Skript bleibt stehen.
+      if (pendingConfirm && msg.action === "shell.test") {
+        say(msg.text, !msg.ok);
+        fitSize();
+        break;
+      }
       pendingConfirm = null;
       confirmRow.hidden = true;
+      detail.hidden = true;
+      activity.hidden = true;
       say(msg.text, !msg.ok && msg.mood === "error");
       react(msg.mood);
       showChoices(msg.choices);
@@ -160,7 +187,20 @@ function handle(msg: ServerMessage) {
       break;
     case "confirm_request":
       pendingConfirm = msg;
+      activity.hidden = true;
       say(msg.text);
+      // Vorschau zum Prüfen: Diff einer Datei oder das Skript mit Panco-Einschätzung
+      detail.hidden = !msg.detail;
+      detail.replaceChildren(
+        ...(msg.detail ?? "").split("\n").map((line) => {
+          const span = document.createElement("span");
+          span.textContent = line + "\n";
+          if (line.startsWith("+ ")) span.className = "add";
+          else if (line.startsWith("- ")) span.className = "del";
+          else if (line.startsWith("— ") || line.startsWith("• ")) span.className = "note";
+          return span;
+        }),
+      );
       confirmRow.hidden = false;
       confirmHint.textContent = msg.pc_only ? "nur per Klick" : "oder „ja“ tippen";
       showChoices(msg.choices);

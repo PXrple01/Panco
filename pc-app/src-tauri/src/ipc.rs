@@ -10,7 +10,17 @@ use tauri::AppHandle;
 #[tauri::command]
 pub async fn send(app: AppHandle, msg: ClientMessage) -> Result<ServerMessage, String> {
     let engine = crate::engine(&app);
-    tauri::async_runtime::spawn_blocking(move || engine.handle(msg, Source::Text)).await.map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        if let ClientMessage::Command { id, text } = &msg {
+            // Was Panco nicht selbst versteht, geht (wenn eingeschaltet) an Claude.
+            if let Some(reply) = crate::assistant::route(&app, id, text, Source::Text) {
+                return reply;
+            }
+        }
+        engine.handle(msg, Source::Text)
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

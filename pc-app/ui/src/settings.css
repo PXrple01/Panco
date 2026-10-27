@@ -1119,3 +1119,40 @@ ol.steps {
   padding-left: 20px;
   line-height: 1.7;
 }
+.chat {
+  display: grid;
+  gap: 8px;
+  max-height: 340px;
+  overflow: auto;
+  padding: 4px 2px;
+}
+.msg {
+  margin: 0;
+  max-width: 82%;
+  padding: 8px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.msg--me {
+  justify-self: end;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.55), rgba(168, 85, 247, 0.4));
+  border-bottom-right-radius: 4px;
+}
+.msg--panco {
+  justify-self: start;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom-left-radius: 4px;
+}
+pre.code {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.4);
+  font: 11.5px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color: #ddd6fe;
+  white-space: pre-wrap;
+}

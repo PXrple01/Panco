@@ -356,6 +356,22 @@ impl Engine {
         }
     }
 
+    /// Kann Panco diesen Satz selbst erledigen (Antwort auf eine Frage, eigener Befehl, Parser)?
+    /// Sonst darf er – wenn eingeschaltet – an Claude gehen.
+    pub fn understands(&self, text: &str, source: &Source) -> bool {
+        let norm = normalize::command(text);
+        if self.has_pending() && (parser::yes_no(&norm).is_some() || parser::wants_quiet(&norm)) {
+            return true;
+        }
+        if crate::memory::Macros::load(&self.data_dir()).find(&norm).is_some() {
+            return true;
+        }
+        match source {
+            Source::Voice => parser::parse_text_lenient(text).is_some(),
+            _ => parser::parse_text(text).is_some(),
+        }
+    }
+
     /// Direkter Aktionsaufruf (Kacheln, Auswahlknöpfe, Einstellungen, später Claude-Tools).
     pub fn invoke(&self, id: &str, action: &str, params: Value, source: Source) -> ServerMessage {
         if !self.enabled() {

@@ -52,6 +52,10 @@
           <svg viewBox="0 0 24 24"><path d="M8 4.5a3 3 0 1 0 0 6h8a3 3 0 1 0 0-6 3 3 0 0 0-3 3v9a3 3 0 1 0 3-3H8a3 3 0 1 0 3 3v-9a3 3 0 0 0-3-3z" /></svg>
           Befehle & Gedächtnis
         </button>
+        <button class="tab" data-tab="claude" type="button">
+          <svg viewBox="0 0 24 24"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z" /><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" /></svg>
+          Claude
+        </button>
         <button class="tab" data-tab="files" type="button">
           <svg viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.2h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" /></svg>
           Ordner & Backup
@@ -365,6 +369,63 @@
         </section>
       </div>
 
+      <!-- ================= Claude ================= -->
+      <div class="panel" data-panel="claude" hidden>
+        <header class="hero">
+          <div class="hero__icon"><svg viewBox="0 0 24 24"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z" /></svg></div>
+          <div>
+            <h1>Claude</h1>
+            <p>Was Panco nicht selbst kann, fragt er Claude – nur der Text, nie Audio.</p>
+          </div>
+        </header>
+
+        <section class="card">
+          <div class="card__head"><h2>Verbindung</h2><span id="cl-chip" class="chip">aus</span></div>
+          <p class="dim small">Den Key bekommst du unter <strong>platform.claude.com</strong> → API Keys. Er liegt nur im Windows-Tresor, nie in einer Datei. Panco verbindet sich nur, wenn du etwas fragst – jede Frage kostet ein paar Cent.</p>
+          <div class="actions">
+            <input id="cl-key" class="path-input" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false" />
+            <button id="cl-key-save" class="btn btn--accent" type="button">Speichern</button>
+            <button id="cl-key-test" class="btn" type="button">Testen</button>
+            <button id="cl-key-del" class="btn" type="button" hidden>Key entfernen</button>
+          </div>
+          <p class="small" id="cl-key-status"></p>
+          <label class="field row">
+            <span class="label">Claude-Modus <span class="hint">Was Panco nicht versteht, geht an Claude. „Frag Claude …“ geht immer.</span></span>
+            <input type="checkbox" id="cl-on" class="switch" />
+          </label>
+          <div class="grid2">
+            <label class="field">
+              <span class="label">Modell</span>
+              <select id="cl-model" class="select"></select>
+            </label>
+            <label class="field">
+              <span class="label">Denktiefe</span>
+              <select id="cl-effort" class="select">
+                <option value="low">schnell (zum Sprechen)</option>
+                <option value="medium">gründlicher</option>
+                <option value="high">sehr gründlich (langsam)</option>
+              </select>
+            </label>
+          </div>
+          <label class="field row">
+            <span class="label">Bildschirmfoto an Claude erlauben <span class="hint">nur wenn der lokal erkannte Text nicht reicht, nur für die eine Frage</span></span>
+            <input type="checkbox" id="cl-images" class="switch" />
+          </label>
+        </section>
+
+        <section class="card">
+          <div class="card__head"><h2>Gespräch</h2><button id="cl-reset" class="btn btn--small" type="button">Neues Gespräch</button></div>
+          <p class="dim small">Nur im Speicher, nach 30 Minuten Pause oder „Panco, neues Gespräch“ weg.</p>
+          <div id="cl-history" class="chat"></div>
+        </section>
+
+        <section class="card">
+          <h2>Gespeicherte Skripte</h2>
+          <p class="dim small">Hat ein Skript von Claude geklappt, sag „Speicher das als Befehl …“ – danach läuft es ohne Claude. Panco prüft es trotzdem jedes Mal neu. <span id="cl-sandbox"></span></p>
+          <div id="cl-scripts" class="macros"></div>
+        </section>
+      </div>
+
       <!-- ================= Ordner & Backup ================= -->
       <div class="panel" data-panel="files" hidden>
         <header class="hero">
@@ -456,6 +517,7 @@
   </div>
   <script type="module" src="./src/settings.ts"></script>
   <script type="module" src="./src/settings-brain.ts"></script>
+  <script type="module" src="./src/settings-claude.ts"></script>
   <script type="module" src="./src/settings-data.ts"></script>
 </body>
 </html>
