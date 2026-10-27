@@ -53,7 +53,7 @@ fn fail(e: impl std::fmt::Display) -> PlatformError {
 }
 
 /// COM pro Thread initialisieren (mehrfach aufrufen ist harmlos).
-fn com_init() {
+pub(super) fn com_init() {
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
     }
@@ -99,7 +99,7 @@ fn quote_arg(a: &str) -> String {
     }
 }
 
-fn process_name(pid: u32) -> Option<String> {
+pub(super) fn process_name(pid: u32) -> Option<String> {
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
         let mut buf = [0u16; 520];
@@ -372,6 +372,38 @@ impl Platform for WindowsPlatform {
         }
     }
 
+    fn capture(&self, target: CaptureTarget) -> PResult<Image> {
+        super::windows_read::capture(target)
+    }
+    fn ocr(&self, image: &Image) -> PResult<String> {
+        super::windows_read::ocr(image)
+    }
+    fn clipboard_text(&self) -> PResult<Option<String>> {
+        super::windows_read::clipboard_text()
+    }
+    fn active_window(&self) -> PResult<Option<WindowInfo>> {
+        super::windows_read::active_window()
+    }
+    fn powershell(
+        &self,
+        script: &std::path::Path,
+        cwd: &std::path::Path,
+        timeout: std::time::Duration,
+    ) -> PResult<ScriptOutput> {
+        super::windows_read::powershell(script, cwd, timeout)
+    }
+    fn powershell_parse(&self, script: &str) -> PResult<ParsedScript> {
+        super::windows_read::powershell_parse(script)
+    }
+    fn restore_point(&self, description: &str) -> PResult<()> {
+        super::windows_read::restore_point(description)
+    }
+    fn sandbox_available(&self) -> bool {
+        super::windows_read::sandbox_available()
+    }
+    fn sandbox_run(&self, script: &str, timeout: std::time::Duration) -> PResult<String> {
+        super::windows_read::sandbox_run(script, timeout)
+    }
     fn random_bytes(&self, n: usize) -> PResult<Vec<u8>> {
         use ::windows::Win32::Security::Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG};
         let mut buf = vec![0u8; n];

@@ -57,7 +57,7 @@ impl StreamParser {
             }
             "content_block_delta" => {
                 let i = v["index"].as_u64().unwrap_or(0) as usize;
-                let Some(block) = self.blocks.get_mut(i) else { return None };
+                let block = self.blocks.get_mut(i)?;
                 let d = &v["delta"];
                 match d["type"].as_str().unwrap_or("") {
                     "text_delta" => {

@@ -1505,7 +1505,7 @@ pub fn cross_check(a: &mut Analysis, parsed: &ParsedScript) {
     }
     for c in &parsed.commands {
         let n = canonical(c);
-        if !a.commands.iter().any(|x| *x == n) {
+        if !a.commands.contains(&n) {
             a.raise(Class::Risky, format!("nicht eindeutig erkannt: {c}"));
         }
     }

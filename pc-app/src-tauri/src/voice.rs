@@ -123,7 +123,7 @@ fn whisper_prompt(engine: &Engine) -> String {
         "Panco, öffne Deadlock. Starte Discord. Lautstärke auf 30 Prozent. Nächstes Lied. Such Build Guides. \
          Finde meine letzte Rechnung. Neue Notiz Einkauf: Milch. Lies die Notiz vor. Lösche die Datei. \
          Mach das rückgängig. Wie spät ist es? Was kannst du? Spotify leiser. Discord stumm. Merk dir. \
-         Wie lange habe ich heute gespielt? Spiel Lo-Fi auf Spotify. Was läuft gerade? Nochmal. Fahr den PC herunter. Ja. Nein. {}",
+         Wie lange habe ich heute gespielt? Spiel Lo-Fi auf Spotify. Was läuft gerade? Lies den Bildschirm vor. Frag Claude. Neues Gespräch. Nochmal. Fahr den PC herunter. Ja. Nein. {}",
         list.trim_end_matches(", ")
     )
 }

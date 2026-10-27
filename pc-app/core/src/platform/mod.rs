@@ -9,6 +9,8 @@ pub mod mock;
 mod other;
 #[cfg(windows)]
 mod windows;
+#[cfg(windows)]
+mod windows_read;
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum PlatformError {

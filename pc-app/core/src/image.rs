@@ -26,15 +26,15 @@ pub fn downscale(img: &Image, max: u32) -> Image {
             for sy in y0..y1.min(img.height) {
                 for sx in x0..x1.min(img.width) {
                     let i = ((sy * img.width + sx) * 4) as usize;
-                    for c in 0..4 {
-                        sum[c] += img.rgba[i + c] as u32;
+                    for (c, s) in sum.iter_mut().enumerate() {
+                        *s += img.rgba[i + c] as u32;
                     }
                     n += 1;
                 }
             }
             let o = ((y * w + x) * 4) as usize;
-            for c in 0..4 {
-                out[o + c] = (sum[c] / n.max(1)) as u8;
+            for (c, s) in sum.iter().enumerate() {
+                out[o + c] = (s / n.max(1)) as u8;
             }
         }
     }

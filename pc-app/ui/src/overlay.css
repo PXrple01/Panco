@@ -372,6 +372,9 @@ kbd {
   font-weight: 600;
   color: #e9d5ff;
 }
+.activity[hidden] {
+  display: none;
+}
 .activity::before {
   content: "";
   width: 8px;

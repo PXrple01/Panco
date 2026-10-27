@@ -159,7 +159,7 @@ Windows (`tools/measure.ps1`); Werte aus der Linux-Entwicklungsumgebung klar als
 6. ✅ **Spiele, Medien, Gedächtnis & Makros:** Spiel-Erkennung + Game Mode + Spielzeit, Lautstärke pro App,
    Spotify (optional Web-API), Kontext-Gedächtnis/Vorlieben-Regeln, eigene Befehle per Sprache (Einstellungsreiter),
    Rückfragen pro Aktion abschaltbar
-7. **Claude-Assistent:** Tool Use mit Stufen, Streaming, Bildschirm/Fenster/Code lesen auf Anfrage (lokale OCR zuerst),
+7. ✅ **Claude-Assistent:** Tool Use mit Stufen, Streaming, Bildschirm/Fenster/Code lesen auf Anfrage (lokale OCR zuerst),
    Code bearbeiten mit Diff + Bestätigung, geprüfte Shell (Wiederherstellungspunkt, Sandbox-Testlauf, gespeicherte
    Befehle), Gedächtnis in natürlicher Sprache, Verlauf, Sprachausgabe
 8. **Tagesstart & Hinweise:** Guten-Morgen, Pausen-/Gesundheitserinnerungen, Nachrichten-Hinweise,
@@ -173,4 +173,4 @@ Windows (`tools/measure.ps1`); Werte aus der Linux-Entwicklungsumgebung klar als
 14. **Abschluss:** README, Befehlsliste, Sicherheitskonzept, Messwerte
 
 Nach jeder Etappe committen (verständliche Nachricht) und Messwerte zeigen.
-Stand: Etappen 1–6 erledigt, als Nächstes Etappe 7.
+Stand: Etappen 1–7 erledigt, als Nächstes Etappe 8.
