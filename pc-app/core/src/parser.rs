@@ -145,6 +145,34 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
             r"^(?:was kannst du(?: alles)?(?: machen| tun)?|hilfe|was kann ich (?:dich )?fragen|wie funktionierst du|was kann panco)$",
             |_| intent("panco.help", json!({})),
         ),
+        // --- Smalltalk (lokal, kostenlos) ---
+        rule(
+            r"^(?:(?:hallo |hey |hi )?wie geht(?:'?s| es)(?: dir)?(?: heute| so)?|wie geht's|alles (?:klar|gut|fit) bei dir|wie fühlst du dich|was geht(?: ab)?)$",
+            |_| intent("panco.chat", json!({"topic": "how"})),
+        ),
+        rule(
+            r"^(?:danke|dankeschön|danke schön|vielen dank|danke dir|merci|thx|danke sehr)(?: dir)?(?: panco)?$",
+            |_| intent("panco.chat", json!({"topic": "thanks"})),
+        ),
+        rule(r"^(?:hallo|hi|hey|moin|servus|huhu|na du|grüß dich|hallöchen)(?: panco)?$", |_| {
+            intent("panco.chat", json!({"topic": "hello"}))
+        }),
+        rule(r"^(?:wer bist du|was bist du|stell dich (?:mal )?vor)$", |_| {
+            intent("panco.chat", json!({"topic": "who"}))
+        }),
+        rule(r"^(?:gute nacht|nacht|schlaf gut)$", |_| intent("panco.chat", json!({"topic": "night"}))),
+        rule(r"^(?:guten morgen|morgen|moin moin)$", |_| intent("panco.chat", json!({"topic": "morning"}))),
+        rule(
+            r"^(?:du bist (?:so )?(?:toll|super|süß|cool|klasse|der beste|die beste|lieb|niedlich)|gut gemacht|gute arbeit|braver panda)$",
+            |_| intent("panco.chat", json!({"topic": "praise"})),
+        ),
+        rule(r"^(?:ich (?:liebe|mag) dich|ich hab dich lieb)$", |_| intent("panco.chat", json!({"topic": "love"}))),
+        rule(r"^(?:mir ist langweilig|langweilig|was soll ich machen|was soll ich spielen)$", |_| {
+            intent("panco.chat", json!({"topic": "bored"}))
+        }),
+        rule(r"^(?:sorry|entschuldigung|tut mir leid|verzeihung)$", |_| {
+            intent("panco.chat", json!({"topic": "sorry"}))
+        }),
         // "Lies mir vor, was im Editor steht" – lokal per Texterkennung (nur auf Anfrage).
         rule(
             r"^(?:(?:lies|lese|les|läs|lees)(?: mir)?(?: vor)? was (?:im|in dem|auf dem|in meinem|am|da im) (editor|fenster|bildschirm|screen|monitor|browser|chat)|was steht (?:da|hier|im|in dem|auf dem) ?(editor|fenster|bildschirm|screen|monitor|browser|chat)?)\b.*$",
@@ -766,6 +794,10 @@ mod tests {
         assert_eq!(p("Panco, wie spät ist es?"), Some(("info.time", json!({"what": "time"}))));
         assert_eq!(p("Welcher Tag ist heute?"), Some(("info.time", json!({"what": "date"}))));
         assert_eq!(p("Was kannst du alles?"), Some(("panco.help", json!({}))));
+        assert_eq!(p("Panco, wie geht es dir?"), Some(("panco.chat", json!({"topic": "how"}))));
+        assert_eq!(p("Wie geht's?"), Some(("panco.chat", json!({"topic": "how"}))));
+        assert_eq!(p("Danke dir!"), Some(("panco.chat", json!({"topic": "thanks"}))));
+        assert_eq!(p("Du bist süß"), Some(("panco.chat", json!({"topic": "praise"}))));
         assert_eq!(p("Lese mir vor, was in dem Editor steht."), Some(("screen.read", json!({"target": "window"}))));
         assert_eq!(p("Läs mir vor, was in dem Editor steht."), Some(("screen.read", json!({"target": "window"}))));
         assert_eq!(p("Panko, macht das Röckgängig."), Some(("panco.undo", json!({}))));

@@ -131,7 +131,16 @@
           <div class="field">
             <span class="label">Whisper-Modell</span>
             <ul class="models" id="models"></ul>
+            <span class="dim small">Versteht Panco dich oft falsch? „Small“ laden – das erkennt Deutsch deutlich besser.</span>
           </div>
+          <label class="field">
+            <span class="label">Genauigkeit der Erkennung</span>
+            <select id="quality" class="select">
+              <option value="fast">Schnell – am wenigsten Rechenzeit</option>
+              <option value="balanced">Ausgewogen – versteht Undeutliches besser (Standard)</option>
+              <option value="precise">Genau – am besten, braucht am längsten</option>
+            </select>
+          </label>
           <label class="field">
             <span class="label">Wake-Word-Empfindlichkeit <span class="value" id="th-val"></span></span>
             <input type="range" id="threshold" min="0.35" max="0.7" step="0.05" />

@@ -22,6 +22,8 @@ pub struct Voice {
     pub mic: Mutex<MicState>,
     pub avatar: Mutex<AvatarState>,
     counter: AtomicU64,
+    /// Sicherheit des letzten Wake-Word-Treffers (für den Fehlaktivierungs-Filter)
+    last_wake: Mutex<f32>,
 }
 
 pub fn get(app: &AppHandle) -> tauri::State<'_, Voice> {
@@ -45,6 +47,7 @@ pub fn start(app: &AppHandle) {
         mic: Mutex::new(MicState::Off),
         avatar: Mutex::new(AvatarState::Idle),
         counter: AtomicU64::new(0),
+        last_wake: Mutex::new(0.0),
     });
     // Erst jetzt ist der Zustand registriert: Konfig erneut senden, damit die Pipeline ihren
     // Mikrofonzustand meldet.
@@ -95,6 +98,11 @@ fn build_config(app: &AppHandle, muted: bool) -> VoiceConfig {
         threshold: v.wake_threshold.clamp(panco_voice::wake::MIN_THRESHOLD, 0.9),
         model_path: model::path(&models_dir(), &v.model),
         keep_model_secs: v.keep_model_secs.clamp(5, 3600),
+        quality: match v.stt_quality.as_str() {
+            "fast" => panco_voice::stt::Quality::Fast,
+            "precise" => panco_voice::stt::Quality::Precise,
+            _ => panco_voice::stt::Quality::Balanced,
+        },
         prompt: whisper_prompt(&engine),
         phrases: command_phrases(&engine),
         loopback_check: v.loopback_check,
@@ -119,11 +127,10 @@ fn whisper_prompt(engine: &Engine) -> String {
         list.push_str(&n);
         list.push_str(", ");
     }
+    // Nur Namen und Schlüsselwörter, keine ganzen Beispielsätze: Bei undeutlichem Audio schreibt
+    // Whisper sonst gern einen Beispielsatz hin ("öffne Deadlock" statt der eigentlichen Frage).
     format!(
-        "Panco, öffne Deadlock. Starte Discord. Lautstärke auf 30 Prozent. Nächstes Lied. Such Build Guides. \
-         Finde meine letzte Rechnung. Neue Notiz Einkauf: Milch. Lies die Notiz vor. Lösche die Datei. \
-         Mach das rückgängig. Wie spät ist es? Was kannst du? Spotify leiser. Discord stumm. Merk dir. \
-         Wie lange habe ich heute gespielt? Spiel Lo-Fi auf Spotify. Was läuft gerade? Lies den Bildschirm vor. Frag Claude. Neues Gespräch. Nochmal. Fahr den PC herunter. Ja. Nein. {}",
+        "Panco. Lautstärke, Prozent, Notiz, Rechnung, Datei, Ordner, Spotify, Discord, Steam, Claude, Bildschirm, Zwischenablage, Spielzeit. {}",
         list.trim_end_matches(", ")
     )
 }
@@ -227,7 +234,10 @@ fn on_event(app: &AppHandle, event: Event) {
             set_state(app, None, Some(m), None);
             tray::refresh(app);
         }
-        Event::Wake { .. } => {
+        Event::Wake { score } => {
+            if let Some(v) = try_get(app) {
+                *v.last_wake.lock().unwrap() = score;
+            }
             // "Panco, …" unterbricht, was Panco gerade sagt.
             if let Some(v) = try_get(app) {
                 v.speaker.stop();
@@ -295,9 +305,14 @@ fn handle_transcript(app: &AppHandle, purpose: Purpose, text: &str) {
     // Fehlaktivierung? Nach dem Wake-Word kam weder "Panco" im Text noch ein verständlicher Befehl
     // (z. B. Unterhaltung im Raum). Dann still bleiben – nichts ausführen, nichts vorlesen und den
     // mitgehörten Text auch nicht protokollieren.
+    // Ein klares "Panco" (deutlich über der Schwelle) gilt immer – dann antwortet Panco auch auf
+    // Unverstandenes (Claude oder "nicht verstanden") statt still zu bleiben.
+    let threshold = crate::engine(app).config().voice.wake_threshold;
+    let clear_wake = *v.last_wake.lock().unwrap() >= threshold + 0.12;
     if purpose == Purpose::Wake
+        && !clear_wake
         && !starts_with_wake_word(&text)
-        && panco_core::parser::parse_text_lenient(&text).is_none()
+        && !crate::engine(app).understands(&text, &Source::Voice)
     {
         crate::engine(app).log_system("ignored", "Vermutlich Fehlaktivierung (kein Befehl erkannt) – ignoriert");
         set_state(app, Some(AvatarState::Idle), None, None);
@@ -346,7 +361,7 @@ fn handle_transcript(app: &AppHandle, purpose: Purpose, text: &str) {
 
 fn starts_with_wake_word(text: &str) -> bool {
     text.split_whitespace()
-        .take(2)
+        .take(3)
         .any(|w| panco_core::normalize::is_wake_word(w.trim_matches(|c: char| !c.is_alphanumeric())))
 }
 

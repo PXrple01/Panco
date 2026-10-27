@@ -112,6 +112,7 @@ pub(crate) enum SttJob {
         prompt: String,
         purpose: Purpose,
         model: std::path::PathBuf,
+        quality: crate::stt::Quality,
     },
     #[cfg_attr(not(windows), allow(dead_code))]
     Windows {
@@ -530,6 +531,7 @@ impl Pipeline {
                 prompt,
                 purpose: rec.purpose,
                 model: self.cfg.model_path.clone(),
+                quality: self.cfg.quality,
             });
         }
         self.sync_mic();
@@ -617,8 +619,9 @@ fn spawn_stt(back: Sender<Msg>, stats: Arc<Stats>, keep_secs: u64) -> Sender<Stt
                     }
                 };
                 let (purpose, result) = match job {
-                    SttJob::Whisper { pcm, prompt, purpose, model } => {
+                    SttJob::Whisper { pcm, prompt, purpose, model, quality } => {
                         whisper.set_model(model);
+                        whisper.set_quality(quality);
                         let r = whisper.transcribe(&pcm, &prompt);
                         stats.whisper_loaded.store(whisper.loaded(), Ordering::Relaxed);
                         (purpose, r)

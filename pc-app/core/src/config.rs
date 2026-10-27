@@ -110,6 +110,8 @@ pub struct VoiceSettings {
     pub model: String,
     /// So lange bleibt Whisper nach dem letzten Befehl geladen.
     pub keep_model_secs: u64,
+    /// Erkennung: "fast", "balanced" (Standard) oder "precise"
+    pub stt_quality: String,
     /// Empfindlichkeit des Wake-Words (0.3 = empfindlich … 0.7 = streng)
     pub wake_threshold: f32,
     /// Antworten per Windows-Sprachausgabe vorlesen
@@ -145,6 +147,7 @@ impl Default for VoiceSettings {
             engine: SttChoice::Whisper,
             model: "base".into(),
             keep_model_secs: 30,
+            stt_quality: "balanced".into(),
             wake_threshold: 0.5,
             speak_replies: true,
             show_overlay: true,

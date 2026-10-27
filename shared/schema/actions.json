@@ -1026,6 +1026,37 @@
           }
         }
       }
+    },
+    {
+      "id": "panco.chat",
+      "tier": 1,
+      "remote": true,
+      "claude": false,
+      "title": "Plaudern",
+      "description": "Kurze, freundliche Antwort auf Smalltalk (wie geht's, danke, hallo …) – lokal, ohne Claude.",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "topic"
+        ],
+        "properties": {
+          "topic": {
+            "enum": [
+              "how",
+              "thanks",
+              "hello",
+              "who",
+              "night",
+              "morning",
+              "praise",
+              "love",
+              "bored",
+              "sorry"
+            ]
+          }
+        }
+      }
     }
   ]
 }

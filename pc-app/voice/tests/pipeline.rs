@@ -19,6 +19,7 @@ fn config(mode: Mode) -> VoiceConfig {
         threshold: 0.5,
         model_path: tmp("fehlt.bin"),
         keep_model_secs: 5,
+        quality: Default::default(),
         prompt: String::new(),
         phrases: vec![],
         loopback_check: true,

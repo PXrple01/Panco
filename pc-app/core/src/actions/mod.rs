@@ -245,6 +245,7 @@ pub fn registry() -> Vec<Box<dyn Action>> {
         Box::new(spotify::Play),
         Box::new(spotify::Now),
         Box::new(info::Help),
+        Box::new(info::Chat),
         Box::new(read::ScreenRead),
         Box::new(read::ScreenLook),
         Box::new(read::WindowActive),

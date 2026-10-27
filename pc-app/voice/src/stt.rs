@@ -29,17 +29,50 @@ const HALLUCINATIONS: [&str; 8] = [
     "zdf",
 ];
 
+/// Genauigkeit gegen Tempo (gemessen mit stt_eval auf verrauschten Aufnahmen).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Quality {
+    /// Gieriges Dekodieren, ~10-s-Fenster: am schnellsten.
+    Fast,
+    /// Volles Hörfenster – erkennt undeutliche Wörter besser (~2× so lang).
+    #[default]
+    Balanced,
+    /// Zusätzlich Strahlsuche (5 Varianten): am genauesten, am langsamsten.
+    Precise,
+}
+
+impl Quality {
+    fn beam(self) -> i32 {
+        if self == Quality::Precise {
+            5
+        } else {
+            1
+        }
+    }
+    fn min_ctx(self) -> i32 {
+        match self {
+            Quality::Fast => 512,
+            Quality::Balanced | Quality::Precise => 1500,
+        }
+    }
+}
+
 pub struct WhisperStt {
     model: PathBuf,
     ctx: Option<WhisperContext>,
     threads: i32,
+    quality: Quality,
 }
 
 impl WhisperStt {
     pub fn new(model: PathBuf) -> Self {
         // Halbe Kernzahl, max. 4: schnell genug, ohne ein laufendes Spiel auszubremsen.
         let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
-        Self { model, ctx: None, threads: (cores / 2).clamp(2, 4) as i32 }
+        Self { model, ctx: None, threads: (cores / 2).clamp(2, 4) as i32, quality: Quality::default() }
+    }
+
+    pub fn set_quality(&mut self, q: Quality) {
+        self.quality = q;
     }
 
     pub fn set_model(&mut self, model: PathBuf) {
@@ -86,7 +119,12 @@ impl WhisperStt {
         let secs = audio.len() as f32 / 16_000.0;
 
         let mut state = ctx.create_state().map_err(|e| e.to_string())?;
-        let mut p = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+        let beam = self.quality.beam();
+        let mut p = if beam > 1 {
+            FullParams::new(SamplingStrategy::BeamSearch { beam_size: beam, patience: -1.0 })
+        } else {
+            FullParams::new(SamplingStrategy::Greedy { best_of: 1 })
+        };
         p.set_language(Some("de"));
         p.set_n_threads(self.threads);
         p.set_translate(false);
@@ -98,9 +136,9 @@ impl WhisperStt {
         p.set_print_progress(false);
         p.set_print_realtime(false);
         p.set_print_timestamps(false);
-        // Nur einen Teil des 30-s-Fensters rechnen: 512 (~10 s) ist der gemessene Kompromiss –
-        // kleiner wird die Erkennung deutlich schlechter, größer kaum besser, aber langsamer.
-        p.set_audio_ctx(((secs * 50.0) as i32 + 64).clamp(512, 1500));
+        // "Schnell" rechnet nur ~10 s des 30-s-Fensters; mit Raumhall und Rauschen erkennt das volle
+        // Fenster undeutliche Wörter merklich besser (stt_eval, verrauschte Aufnahmen).
+        p.set_audio_ctx(((secs * 50.0) as i32 + 64).clamp(self.quality.min_ctx(), 1500));
         // Befehle sind kurz; begrenzt außerdem Halluzinationsschleifen.
         p.set_max_tokens(64);
         if !prompt.is_empty() {

@@ -160,5 +160,15 @@
   "shell_test_unknown": "Dieses Skript kenne ich nicht mehr – bitte nochmal fragen.",
   "shell_too_big_backup": "zu große Ordner für eine Sicherungskopie",
   "claude_new_conversation": "Okay, neues Gespräch.",
-  "claude_off": "Das kann ich noch nicht. Mit dem Claude-Modus (Einstellungen) könnte ich mehr."
+  "claude_off": "Das kann ich noch nicht. Mit dem Claude-Modus (Einstellungen) könnte ich mehr.",
+  "chat_how": "Mir geht's richtig gut, danke! Bereit für die nächste Runde. Und dir?|Super, ich hab gerade ein Nickerchen gemacht. Was steht an?|Bestens! Mit dir zu zocken macht einfach Spaß.",
+  "chat_thanks": "Gern geschehen!|Immer doch!|Dafür bin ich da.",
+  "chat_hello": "Hallo! Was kann ich für dich tun?|Hey! Schön, dich zu hören.|Hi! Ich bin bereit.",
+  "chat_who": "Ich bin Panco, dein kleiner Panda und Gaming-Begleiter. Ich starte Spiele, steuere Musik und merke mir Dinge für dich.",
+  "chat_night": "Gute Nacht! Schlaf gut und träum was Schönes.|Gute Nacht! Bis morgen.",
+  "chat_morning": "Guten Morgen! Gut geschlafen?|Guten Morgen! Auf geht's.",
+  "chat_praise": "Oh, danke! Du bist aber auch toll.|Hehe, das freut mich!",
+  "chat_love": "Ich hab dich auch lieb!|Aww, du bist der Beste.",
+  "chat_bored": "Wie wär's mit einer Runde zocken? Sag einfach, welches Spiel ich starten soll.|Langweilig? Ich könnte Musik anmachen – sag „Spiel Lo-Fi auf Spotify“.",
+  "chat_sorry": "Kein Problem!|Alles gut, passiert."
 }

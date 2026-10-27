@@ -12,6 +12,7 @@ interface VoiceSettings {
   engine: "whisper" | "windows";
   model: string;
   keep_model_secs: number;
+  stt_quality: string;
   wake_threshold: number;
   speak_replies: boolean;
   show_overlay: boolean;
@@ -234,6 +235,7 @@ function render(s: Status) {
     syncSliders();
     $<HTMLInputElement>("overlay").checked = s.voice.show_overlay;
     $<HTMLInputElement>("keep").value = String(s.voice.keep_model_secs);
+    $<HTMLSelectElement>("quality").value = s.voice.stt_quality;
   }
   renderModels(s);
   if (!training) $<HTMLButtonElement>("train-start").textContent = s.wakeword_ready ? "Neu einsprechen" : "Einsprechen starten";
@@ -425,6 +427,7 @@ $<HTMLInputElement>("ov-hide").addEventListener("change", (e) =>
 $<HTMLInputElement>("ov-reduce").addEventListener("change", (e) => saveLook({ reduce_motion: (e.target as HTMLInputElement).checked }));
 $("ov-preview").addEventListener("click", () => invoke("overlay_preview"));
 $<HTMLInputElement>("overlay").addEventListener("change", (e) => save({ show_overlay: (e.target as HTMLInputElement).checked }));
+$<HTMLSelectElement>("quality").addEventListener("change", (e) => save({ stt_quality: (e.target as HTMLSelectElement).value }));
 $<HTMLInputElement>("keep").addEventListener("change", (e) => save({ keep_model_secs: Number((e.target as HTMLInputElement).value) }));
 $<HTMLInputElement>("muted").addEventListener("change", (e) => invoke("set_muted", { muted: (e.target as HTMLInputElement).checked }));
 

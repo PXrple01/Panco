@@ -7,6 +7,12 @@ use panco_voice::wav;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut stt = WhisperStt::new(args[1].clone().into());
+    // PANCO_STT_QUALITY=fast|balanced|precise
+    stt.set_quality(match std::env::var("PANCO_STT_QUALITY").as_deref() {
+        Ok("fast") => panco_voice::stt::Quality::Fast,
+        Ok("precise") => panco_voice::stt::Quality::Precise,
+        _ => panco_voice::stt::Quality::Balanced,
+    });
     let prompt = &args[2];
     for f in &args[3..] {
         let (s, rate) = wav::decode(&std::fs::read(f).unwrap()).unwrap();

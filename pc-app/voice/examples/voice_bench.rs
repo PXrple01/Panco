@@ -63,6 +63,7 @@ fn main() {
         threshold: 0.5,
         model_path: model,
         keep_model_secs: 3,
+        quality: Default::default(),
         prompt: "Panco, öffne Deadlock. Starte Counter-Strike 2. Lautstärke auf 30 Prozent. Nächstes Lied. Such Build Guides. Fahr den PC herunter. Discord, Spotify, Steam.".into(),
         phrases: vec![],
         loopback_check: false,

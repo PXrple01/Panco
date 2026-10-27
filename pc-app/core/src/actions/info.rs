@@ -77,6 +77,33 @@ impl Action for Help {
     }
 }
 
+pub struct Chat;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ChatP {
+    topic: String,
+}
+
+impl Action for Chat {
+    fn id(&self) -> &'static str {
+        "panco.chat"
+    }
+    fn prepare(&self, params: &Value, ctx: &Ctx) -> Result<Plan, ActionError> {
+        let p: ChatP = super::params(params)?;
+        const TOPICS: [&str; 10] =
+            ["how", "thanks", "hello", "who", "night", "morning", "praise", "love", "bored", "sorry"];
+        if !TOPICS.contains(&p.topic.as_str()) {
+            return Err(ActionError::InvalidParams("unbekanntes Thema".into()));
+        }
+        // Mehrere Varianten (mit | getrennt) – abwechselnd, damit es nicht wie eine Ansage klingt.
+        let all = t(&format!("chat_{}", p.topic), &[]);
+        let options: Vec<&str> = all.split('|').collect();
+        let text = options[(ctx.now as usize / 7) % options.len()].to_string();
+        Ok(Plan::instant("Plaudern", move |_| Ok(Done::new(text, Mood::Success))))
+    }
+}
+
 pub struct Playtime;
 
 #[derive(Deserialize)]

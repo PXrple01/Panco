@@ -79,6 +79,8 @@ pub struct VoiceConfig {
     pub threshold: f32,
     pub model_path: PathBuf,
     pub keep_model_secs: u64,
+    /// Whisper: schnell / ausgewogen / genau
+    pub quality: stt::Quality,
     /// Vokabular-Hinweis für Whisper (Spielnamen, Befehlswörter).
     pub prompt: String,
     /// Phrasenliste für die Windows-Erkennung.
